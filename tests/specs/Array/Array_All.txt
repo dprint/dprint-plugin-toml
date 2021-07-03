@@ -1,0 +1,19 @@
+== should format array ==
+values = [ 1, 2, 3 ]
+
+[expect]
+values = [1, 2, 3]
+
+== should handle comments in array ==
+values = [
+  1, # 1
+  2, # 2
+  3, # 3
+]
+
+[expect]
+values = [
+  1, # 1
+  2, # 2
+  3, # 3
+]

@@ -1,0 +1,36 @@
+[package]
+name = "dprint-plugin-toml"
+description = "TOML formatter for dprint."
+keywords = ["formatting", "formatter", "toml"]
+version = "0.1.0"
+authors = ["David Sherret <dsherret@gmail.com>"]
+license = "MIT"
+edition = "2018"
+homepage = "https://github.com/dprint/dprint-plugin-toml"
+repository = "https://github.com/dprint/dprint-plugin-toml"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+
+[features]
+wasm = ["serde_json", "dprint-core/wasm"]
+tracing = ["dprint-core/tracing"]
+
+[dependencies]
+dprint-core = { version = "0.43.0", features = ["formatting"] }
+taplo = "0.5.4"
+serde = { version = "1.0.88", features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+
+[dev-dependencies]
+dprint-development = "0.4.1"
+debug-here = "0.2"
+serde_json = { version = "1.0" }

@@ -1,0 +1,15 @@
+== should format the different kinds of keys ==
+key1    =    "value"
+key2-dash   =   "value"
+key3_underscore   =   "value"
+key4.dotted   =  "value"
+key5 . dotted   =   "value"
+"key6"   =   "value"
+
+[expect]
+key1 = "value"
+key2-dash = "value"
+key3_underscore = "value"
+key4.dotted = "value"
+key5.dotted = "value"
+"key6" = "value"
