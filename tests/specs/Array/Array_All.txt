@@ -5,15 +5,19 @@ values = [ 1, 2, 3 ]
 values = [1, 2, 3]
 
 == should handle comments in array ==
-values = [
+values = [ # start
+  # leading comment
+  # testing
   1, # 1
   2, # 2
-  3, # 3
-]
+  3 # 3
+] # end
 
 [expect]
-values = [
+values = [ # start
+  # leading comment
+  # testing
   1, # 1
   2, # 2
   3, # 3
-]
+] # end
