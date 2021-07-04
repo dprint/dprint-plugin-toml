@@ -31,7 +31,7 @@ fn parse_node_with_inner<'a>(
     inner_parse: impl FnOnce(PrintItems, &mut Context<'a>) -> PrintItems,
 ) -> PrintItems {
     let mut items = PrintItems::new();
-    println!("{:?}", node);
+    // println!("{:?}", node);
 
     if node.kind() != SyntaxKind::COMMENT {
         for comment in get_comments_on_previous_lines(node.clone()) {
@@ -83,7 +83,7 @@ fn parse_node_with_inner<'a>(
 }
 
 fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-    print_formatted_tree(node.clone());
+    // print_formatted_tree(node.clone());
 
     let mut found_first = false;
     let new_line_count = Rc::new(Cell::new(0));
@@ -275,7 +275,6 @@ fn parse_comma_separated_values<'a>(
                     end_line: context.get_line_number_at_pos(value.text_range().end().into()),
                 })
             } else { None };
-            println!("{:?}", lines_span);
             let items = parser_helpers::new_line_group({
                 let parsed_comma = if i == nodes_count - 1 {
                     // todo: make this conditional based on config
@@ -357,6 +356,8 @@ fn parse_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintIt
     items
 }
 
+#[allow(dead_code)]
+#[cfg(debug_assertions)]
 fn print_formatted_tree(node: SyntaxNode) {
     print_node_and_children(node, 0);
 
@@ -473,30 +474,6 @@ fn get_comments_on_previous_lines(mut element: SyntaxElement) -> Vec<SyntaxToken
         }
     }
     comments.reverse();
-    comments
-}
-
-fn get_comments_on_next_lines(mut element: SyntaxElement) -> Vec<SyntaxToken> {
-    let mut found_new_line = false;
-    let mut comments = Vec::new();
-    while let Some(sibling) = element.next_sibling_or_token() {
-        element = sibling.clone();
-        match sibling {
-            NodeOrToken::Token(token) => {
-                match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::NEWLINE => found_new_line = true,
-                    SyntaxKind::COMMENT => {
-                        if found_new_line {
-                            comments.push(token)
-                        }
-                    },
-                    _ => break,
-                }
-            }
-            NodeOrToken::Node(_) => break,
-        }
-    }
     comments
 }
 

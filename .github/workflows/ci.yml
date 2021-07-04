@@ -1,0 +1,150 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: ${{ matrix.config.kind }} ${{ matrix.config.os }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - os: ubuntu-16.04
+            kind: test_release
+          - os: ubuntu-16.04
+            kind: test_debug
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: full
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install wasm32 target
+      if: matrix.config.kind == 'test_release'
+      run: rustup target add wasm32-unknown-unknown
+
+    - name: Cache cargo
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build debug
+      if: matrix.config.kind == 'test_debug'
+      run: cargo build --verbose
+    - name: Build release
+      if: matrix.config.kind == 'test_release'
+      run: cargo build --target wasm32-unknown-unknown --features wasm --release --verbose
+
+    - name: Test debug
+      if: matrix.config.kind == 'test_debug'
+      run: cargo test --verbose
+    - name: Test release
+      if: matrix.config.kind == 'test_release'
+      run: cargo test --release --verbose
+
+    - name: Get tag version
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      id: get_tag_version
+      run: echo ::set-output name=TAG_VERSION::${GITHUB_REF/refs\/tags\//}
+
+    # NPM
+    - uses: actions/setup-node@v2
+      if: matrix.config.kind == 'test_release'
+      with:
+        node-version: '14.x'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Setup and test npm deployment
+      if: matrix.config.kind == 'test_release'
+      run: |
+        cd deployment/npm
+        npm install
+        node setup.js ${{ steps.get_tag_version.outputs.TAG_VERSION }}
+        npm run test
+
+    - name: npm publish
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        cd deployment/npm
+        npm publish --access public
+        git reset --hard
+
+      # CARGO PUBLISH
+    - name: Cargo login
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: cargo login ${{ secrets.CRATES_TOKEN }}
+
+    - name: Cargo publish
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: cargo publish
+
+      # GITHUB RELEASE
+    - name: Pre-release
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        cd target/wasm32-unknown-unknown/release/
+        mv dprint_plugin_toml.wasm toml.wasm
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: |
+          target/wasm32-unknown-unknown/release/toml.wasm
+        body: |
+          ## Install
+
+          [Install](https://dprint.dev/install/) and [setup](https://dprint.dev/setup/) dprint.
+
+          Then in your project's dprint configuration file:
+
+          1. Specify the plugin url in the `"plugins"` array.
+          2. Ensure `.toml` file extensions are matched in an `"includes"` pattern.
+          3. Add a `"toml"` configuration property if desired.
+             ```jsonc
+             {
+               // ...etc...
+               "toml": {
+                 // toml config goes here
+               },
+               "includes": [
+                 "**/*.{toml}"
+               ],
+               "plugins": [
+                 "https://plugins.dprint.dev/toml-${{ steps.get_tag_version.outputs.TAG_VERSION }}.wasm"
+               ]
+             }
+             ```
+
+          ## JS Formatting API
+
+            * [JS Formatter](https://github.com/dprint/js-formatter) - Browser/Deno and Node
+            * [npm package](https://www.npmjs.com/package/@dprint/toml)
+        draft: false
+
+      # PLUGIN PUBLISH
+    - name: Checkout plugins repo
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      uses: actions/checkout@v2
+      with:
+        repository: dprint/plugins
+        token: ${{ secrets.CI_REPO_PAT }} # github.token is scoped to current repo, so use this to push to other repo
+        path: dprint-plugins
+    - name: Plugin publish
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+          cd dprint-plugins
+          node scripts/replace-plugin.js dprint-plugin-toml ${{ steps.get_tag_version.outputs.TAG_VERSION }} toml-${{ steps.get_tag_version.outputs.TAG_VERSION }}
+          git add .
+          git config user.name "David Sherret"
+          git config user.email "dsherret@users.noreply.github.com"
+          git commit -m "dprint-plugin-toml ${{ steps.get_tag_version.outputs.TAG_VERSION }}"
+          git push origin main

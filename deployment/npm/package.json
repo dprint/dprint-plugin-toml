@@ -1,0 +1,28 @@
+{
+  "name": "@dprint/toml",
+  "version": "0.0.0",
+  "description": "Wasm buffer for dprint-plugin-toml.",
+  "main": "./index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dprint/dprint-plugin-toml.git"
+  },
+  "keywords": [
+    "toml",
+    "code",
+    "formatter",
+    "dprint"
+  ],
+  "author": "David Sherret",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dprint/dprint-plugin-toml/issues"
+  },
+  "homepage": "https://github.com/dprint/dprint-plugin-toml#readme",
+  "scripts": {
+    "test": "node index.test.js"
+  },
+  "devDependencies": {
+    "@dprint/formatter": "~0.1.4"
+  }
+}
