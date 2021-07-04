@@ -1,0 +1,23 @@
+== should format a table ==
+[table-1]
+key1   = "some string"
+key2   = 123
+
+[table-2] # comment
+key1 =   "another string"
+key2 = 456
+
+[  table . table3 . "other" ]
+key1 = 1
+
+[expect]
+[table-1]
+key1 = "some string"
+key2 = 123
+
+[table-2] # comment
+key1 = "another string"
+key2 = 456
+
+[table.table3."other"]
+key1 = 1

@@ -1,14 +1,7 @@
 use dprint_core::formatting::*;
 use dprint_core::formatting::conditions::*;
-use dprint_core::formatting::parser_helpers::MultiLineOptions;
-use dprint_core::formatting::parser_helpers::parse_raw_string;
-use dprint_core::formatting::parser_helpers::parse_raw_string_trim_line_ends;
-use dprint_core::types::ErrBox;
-use taplo::rowan::SyntaxNodeChildren;
-use taplo::syntax::Lang;
 use taplo::syntax::{SyntaxNode, SyntaxToken, SyntaxElement, SyntaxKind};
 use taplo::rowan::NodeOrToken;
-use std::collections::HashSet;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -60,6 +53,8 @@ fn parse_node_with_inner<'a>(
             SyntaxKind::ENTRY => parse_entry(node, context),
             SyntaxKind::KEY => parse_key(node, context),
             SyntaxKind::VALUE => parse_value(node, context),
+            SyntaxKind::TABLE_HEADER => parse_table_header(node, context),
+            SyntaxKind::TABLE_ARRAY_HEADER => parse_table_array_header(node, context),
             _ => Err(()),
         }
         NodeOrToken::Token(token) => match token.kind() {
@@ -70,10 +65,10 @@ fn parse_node_with_inner<'a>(
 
     items.extend(inner_parse(match result {
         Ok(items) => items,
-        Err(()) => parse_raw_string_trim_line_ends(node.text().trim().into()),
+        Err(()) => parser_helpers::parse_raw_string_trim_line_ends(node.text().trim().into()),
     }, context));
 
-    if node.kind() == SyntaxKind::VALUE {
+    if matches!(node.kind(), SyntaxKind::VALUE | SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER) {
         for comment in node.child_comments() {
             items.extend(parse_comment(comment, context));
         }
@@ -141,7 +136,7 @@ fn parse_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsRes
             single_line_space_at_start: false,
             single_line_space_at_end: false,
             custom_single_line_separator: None,
-            multi_line_options: MultiLineOptions::surround_newlines_indented(),
+            multi_line_options: parser_helpers::MultiLineOptions::surround_newlines_indented(),
             force_possible_newline_at_start: false,
         }, context),
         ParseSurroundedByTokensParams {
@@ -197,6 +192,26 @@ fn parse_children_inline<'a>(node: SyntaxNode, context: &mut Context<'a>) -> Pri
         items.extend(parse_node(element, context));
     }
     items
+}
+
+fn parse_table_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
+    // Spec: Naming rules for tables are the same as for keys
+    let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
+    let mut items = PrintItems::new();
+    items.push_str("[");
+    items.extend(parse_node(key.into(), context));
+    items.push_str("]");
+    Ok(items)
+}
+
+fn parse_table_array_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
+    // Spec: Naming rules for tables are the same as for keys
+    let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
+    let mut items = PrintItems::new();
+    items.push_str("[[");
+    items.extend(parse_node(key.into(), context));
+    items.push_str("]]");
+    Ok(items)
 }
 
 struct ParseSurroundedByTokensParams {
@@ -337,7 +352,7 @@ fn parse_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintIt
         |context| Some(condition_resolvers::is_start_of_line(context)),
         " ".into(),
     ));
-    items.extend(parse_raw_string(comment.text().as_str()));
+    items.extend(parser_helpers::parse_raw_string(comment.text().as_str()));
     items.push_signal(Signal::ExpectNewLine);
     items
 }
