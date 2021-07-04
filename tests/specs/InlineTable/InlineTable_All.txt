@@ -1,0 +1,11 @@
+== should format an inline table (only) ==
+name = {     first = "Tom",    last = "Preston-Werner" }
+point = {    x = 1, y = 2}
+animal = { type.name =   "pug" }
+empty = {   }
+
+[expect]
+name = { first = "Tom", last = "Preston-Werner" }
+point = { x = 1, y = 2 }
+animal = { type.name = "pug" }
+empty = {}

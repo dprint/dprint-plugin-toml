@@ -56,6 +56,7 @@ fn parse_node_with_inner<'a>(
         NodeOrToken::Node(node) => match node.kind() {
             SyntaxKind::ROOT => parse_root(node, context),
             SyntaxKind::ARRAY => parse_array(node, context),
+            SyntaxKind::INLINE_TABLE => parse_inline_table(node, context),
             SyntaxKind::ENTRY => parse_entry(node, context),
             SyntaxKind::KEY => parse_key(node, context),
             SyntaxKind::VALUE => parse_value(node, context),
@@ -128,13 +129,14 @@ fn parse_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsRes
     let values = node.children();
     let open_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_START)?;
     let close_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_END)?;
+    let force_use_new_lines = has_following_newline(open_token.clone());
     ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
 
     Ok(parse_surrounded_by_tokens(
         |context| parse_comma_separated_values(ParseCommaSeparatedValuesOptions {
             nodes: values.into_iter().map(|v| v.into()).collect::<Vec<_>>(),
             prefer_hanging: false,
-            force_use_new_lines: false,
+            force_use_new_lines,
             allow_blank_lines: true,
             single_line_space_at_start: false,
             single_line_space_at_end: false,
@@ -148,6 +150,23 @@ fn parse_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsRes
         },
         context
     ))
+}
+
+fn parse_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
+    let values = node.children();
+    ensure_all_kind(values.clone(), SyntaxKind::ENTRY)?;
+
+    let mut items = PrintItems::new();
+    items.push_str("{");
+    let mut had_item = false;
+    for (i, value) in values.enumerate() {
+        items.push_str(if i > 0 { ", " } else { " " });
+        items.extend(parse_node(value.into(), context));
+        had_item = true;
+    }
+    items.push_str(if had_item { " }" } else { "}" });
+
+    Ok(items)
 }
 
 fn parse_entry<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
@@ -361,6 +380,24 @@ fn debug_assert_kind(element: SyntaxElement, kind: SyntaxKind) {
     if element.kind() != kind {
         panic!("Debug Assertion: Expected kind {:?}, but was {:?}", kind, element.kind());
     }
+}
+
+fn has_following_newline(token: SyntaxToken) -> bool {
+    let mut element: SyntaxElement = token.into();
+    while let Some(sibling) = element.next_sibling_or_token() {
+        element = sibling.clone();
+        match sibling {
+            NodeOrToken::Token(token) => {
+                match token.kind() {
+                    SyntaxKind::WHITESPACE => continue,
+                    SyntaxKind::NEWLINE | SyntaxKind::COMMENT => return true,
+                    _ => break,
+                }
+            }
+            NodeOrToken::Node(_) => break,
+        }
+    }
+    false
 }
 
 fn get_next_comma_sibling(mut element: SyntaxElement) -> Option<SyntaxToken> {
