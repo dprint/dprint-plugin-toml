@@ -1,0 +1,24 @@
+== should format blank lines appropriately ==
+
+test1 = 1
+
+
+test2 = 2
+test3 = 3
+# comment
+test4 = 4
+
+# comment
+test5 = 5
+
+
+[expect]
+test1 = 1
+
+test2 = 2
+test3 = 3
+# comment
+test4 = 4
+
+# comment
+test5 = 5

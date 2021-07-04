@@ -16,7 +16,7 @@ pub fn format_text(text: &str, config: &Configuration) -> Result<String, ErrBox>
 
 #[cfg(feature = "tracing")]
 pub fn trace_file(text: &str, config: &Configuration) -> dprint_core::formatting::TracingResult {
-    let node = parse_taplo(text)?;
+    let node = parse_taplo(text).unwrap();
 
     dprint_core::formatting::trace_printing(
         || parse_items(node, text, config),

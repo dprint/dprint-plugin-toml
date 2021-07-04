@@ -1,3 +1,4 @@
+~~ lineWidth: 40 ~~
 == should format array ==
 values = [ 1, 2, 3 ]
 
@@ -10,7 +11,9 @@ values = [ # start
   # testing
   1, # 1
   2, # 2
+  # inner comment
   3 # 3
+  # trailing comment
 ] # end
 
 [expect]
@@ -19,5 +22,30 @@ values = [ # start
   # testing
   1, # 1
   2, # 2
+  # inner comment
   3, # 3
+  # trailing comment
 ] # end
+
+== should keep blank lines in the middle ==
+values = [
+
+  123456789012345466798,
+
+  2,
+  3,
+
+
+  4,
+
+]
+
+[expect]
+values = [
+  123456789012345466798,
+
+  2,
+  3,
+
+  4,
+]
