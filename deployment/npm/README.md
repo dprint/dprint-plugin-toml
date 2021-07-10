@@ -12,5 +12,5 @@ import { getBuffer } from "@dprint/toml";
 
 const formatter = createFromBuffer(getBuffer());
 
-console.log(formatter.formatText("test.toml", "key   =   value"));
+console.log(formatter.formatText("test.toml", "key   =   5"));
 ```
