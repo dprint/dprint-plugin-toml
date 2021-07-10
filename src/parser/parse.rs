@@ -124,7 +124,8 @@ fn parse_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsRes
     let values = node.children();
     let open_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_START)?;
     let close_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_END)?;
-    let force_use_new_lines = has_following_newline(open_token.clone());
+    let is_in_inline_table = node.ancestors().any(|a| a.kind() == SyntaxKind::INLINE_TABLE);
+    let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone());
     ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
 
     Ok(parse_surrounded_by_tokens(

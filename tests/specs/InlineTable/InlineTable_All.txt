@@ -13,6 +13,12 @@ empty = {}
 
 == should not break up an array in an inline table ==
 name = { version = "0.1.0", features = ["feature1",   "feature2", "feature3"] }
+other = { version = "0.1.0", features = [
+    "feature1",
+    "feature2",
+    "feature3",
+] }
 
 [expect]
 name = { version = "0.1.0", features = ["feature1", "feature2", "feature3"] }
+other = { version = "0.1.0", features = ["feature1", "feature2", "feature3"] }
