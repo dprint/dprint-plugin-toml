@@ -59,7 +59,7 @@ fn parse_node_with_inner<'a>(
         }
         NodeOrToken::Token(token) => match token.kind() {
             SyntaxKind::COMMENT => Ok(parse_comment(token, context)),
-            _ => Ok(parser_helpers::parse_string(token.text().as_str().trim().into()))
+            _ => Ok(parser_helpers::parse_string(token.text().trim().into()))
         }
     };
 
@@ -344,14 +344,16 @@ fn parse_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintIt
     }
     context.add_handled_comment(pos);
 
+    #[cfg(debug_assertions)]
     debug_assert_kind(comment.clone().into(), SyntaxKind::COMMENT);
+
     let mut items = PrintItems::new();
     items.push_condition(if_false(
         "spaceIfNotStartOfLine",
         |context| Some(condition_resolvers::is_start_of_line(context)),
         " ".into(),
     ));
-    items.extend(parser_helpers::parse_raw_string(comment.text().as_str()));
+    items.extend(parser_helpers::parse_raw_string(comment.text()));
     items.push_signal(Signal::ExpectNewLine);
     items
 }
