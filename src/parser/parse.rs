@@ -161,7 +161,13 @@ fn parse_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintI
     }
     items.push_str(if had_item { " }" } else { "}" });
 
-    Ok(items)
+    // Disable newlines in a table. The spec says the following:
+    // > Inline tables are intended to appear on a single line. A terminating comma (also called trailing comma)
+    // > is not permitted after the last key/value pair in an inline table. No newlines are allowed between the
+    // > curly braces unless they are valid within a value. Even so, it is strongly discouraged to break an inline
+    // > table onto multiples lines. If you find yourself gripped with this desire, it means you should be using
+    // > standard tables.
+    Ok(parser_helpers::with_no_new_lines(items))
 }
 
 fn parse_entry<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
