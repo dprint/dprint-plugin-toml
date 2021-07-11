@@ -26,9 +26,10 @@ tracing = ["dprint-core/tracing"]
 
 [dependencies]
 dprint-core = { version = "0.43.0", features = ["formatting"] }
-taplo = { version = "0.6.1", default_features = false }
+taplo = { git = "https://github.com/thomaseizinger/taplo", rev = "68d8e32", default_features = false }
 serde = { version = "1.0.88", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
+itertools = "0.10"
 
 [dev-dependencies]
 dprint-development = "0.4.1"

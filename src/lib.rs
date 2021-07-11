@@ -1,3 +1,4 @@
+mod cargo;
 pub mod configuration;
 mod format_text;
 mod parser;
