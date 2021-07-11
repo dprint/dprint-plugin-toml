@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::configuration::Configuration;
+use std::collections::HashSet;
 
 pub struct Context<'a> {
     pub config: &'a Configuration,

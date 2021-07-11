@@ -1,16 +1,11 @@
-use std::path::Path;
-use dprint_core::configuration::{
-    GlobalConfiguration,
-    ResolveConfigurationResult,
-    ConfigKeyMap,
-};
+use super::configuration::{resolve_config, Configuration};
+use dprint_core::configuration::{ConfigKeyMap, GlobalConfiguration, ResolveConfigurationResult};
 use dprint_core::generate_plugin_code;
-use dprint_core::types::ErrBox;
 use dprint_core::plugins::{PluginHandler, PluginInfo};
-use super::configuration::{Configuration, resolve_config};
+use dprint_core::types::ErrBox;
+use std::path::Path;
 
-struct TomlPluginHandler {
-}
+struct TomlPluginHandler {}
 
 impl TomlPluginHandler {
     pub const fn new() -> Self {
@@ -19,7 +14,11 @@ impl TomlPluginHandler {
 }
 
 impl PluginHandler<Configuration> for TomlPluginHandler {
-    fn resolve_config(&mut self, config: ConfigKeyMap, global_config: &GlobalConfiguration) -> ResolveConfigurationResult<Configuration> {
+    fn resolve_config(
+        &mut self,
+        config: ConfigKeyMap,
+        global_config: &GlobalConfiguration,
+    ) -> ResolveConfigurationResult<Configuration> {
         resolve_config(config, global_config)
     }
 
@@ -36,7 +35,9 @@ impl PluginHandler<Configuration> for TomlPluginHandler {
     }
 
     fn get_license_text(&mut self) -> String {
-        std::str::from_utf8(include_bytes!("../LICENSE")).unwrap().into()
+        std::str::from_utf8(include_bytes!("../LICENSE"))
+            .unwrap()
+            .into()
     }
 
     fn format_text(

@@ -1,5 +1,7 @@
+use dprint_core::configuration::{
+    resolve_global_config, ConfigKeyMap, ConfigKeyValue, GlobalConfiguration, NewLineKind,
+};
 use std::collections::HashMap;
-use dprint_core::configuration::{GlobalConfiguration, resolve_global_config, NewLineKind, ConfigKeyMap, ConfigKeyValue};
 
 use super::*;
 
@@ -83,15 +85,16 @@ impl ConfigurationBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use dprint_core::configuration::{resolve_global_config, NewLineKind};
+    use std::collections::HashMap;
 
     use super::*;
 
     #[test]
     fn check_all_values_set() {
         let mut config = ConfigurationBuilder::new();
-        config.new_line_kind(NewLineKind::CarriageReturnLineFeed)
+        config
+            .new_line_kind(NewLineKind::CarriageReturnLineFeed)
             .line_width(90)
             .use_tabs(true)
             .indent_width(4)
@@ -99,7 +102,8 @@ mod tests {
 
         let inner_config = config.get_inner_config();
         assert_eq!(inner_config.len(), 4);
-        let diagnostics = resolve_config(inner_config, &resolve_global_config(HashMap::new()).config).diagnostics;
+        let diagnostics =
+            resolve_config(inner_config, &resolve_global_config(HashMap::new()).config).diagnostics;
         assert_eq!(diagnostics.len(), 0);
     }
 
@@ -113,7 +117,10 @@ mod tests {
         let mut config_builder = ConfigurationBuilder::new();
         let config = config_builder.global_config(global_config).build();
         assert_eq!(config.line_width, 90);
-        assert_eq!(config.new_line_kind == NewLineKind::CarriageReturnLineFeed, true);
+        assert_eq!(
+            config.new_line_kind == NewLineKind::CarriageReturnLineFeed,
+            true
+        );
     }
 
     #[test]
