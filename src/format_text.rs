@@ -3,9 +3,14 @@ use super::parser::parse_items;
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::formatting::PrintOptions;
 use dprint_core::types::ErrBox;
+use std::path::Path;
 use taplo::syntax::SyntaxNode;
 
-pub fn format_text(text: &str, config: &Configuration) -> Result<String, ErrBox> {
+pub fn format_text(
+    _file_path: &Path,
+    text: &str,
+    config: &Configuration,
+) -> Result<String, ErrBox> {
     let node = parse_taplo(text)?;
 
     Ok(dprint_core::formatting::format(
