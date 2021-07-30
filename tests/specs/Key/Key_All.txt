@@ -5,7 +5,7 @@ key3_underscore   =   "value"
 key4.dotted   =  "value"
 key5 . dotted   =   "value"
 "key6"   =   "value"
-"" = ""
+"" = "" # comment
 
 [expect]
 key1 = "value"
@@ -14,4 +14,4 @@ key3_underscore = "value"
 key4.dotted = "value"
 key5.dotted = "value"
 "key6" = "value"
-"" = ""
+"" = "" # comment

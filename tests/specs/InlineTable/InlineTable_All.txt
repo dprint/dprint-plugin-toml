@@ -3,13 +3,13 @@
 name = {     first = "Name",    last = "LastName" }
 point = {    x = 1, y = 2}
 animal = { type.name =   "pug" }
-empty = {   }
+empty = {   } # comment
 
 [expect]
 name = { first = "Name", last = "LastName" }
 point = { x = 1, y = 2 }
 animal = { type.name = "pug" }
-empty = {}
+empty = {} # comment
 
 == should not break up an array in an inline table ==
 name = { version = "0.1.0", features = ["feature1",   "feature2", "feature3"] }

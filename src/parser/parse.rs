@@ -183,6 +183,13 @@ fn parse_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintI
     }
     items.push_str(if had_item { " }" } else { "}" });
 
+    // the comment seems to be stored as the last child of an inline table, so check for it here
+    if let Some(NodeOrToken::Token(token)) = node.children_with_tokens().last() {
+        if token.kind() == SyntaxKind::COMMENT {
+            items.extend(parse_comment(token.into(), context));
+        }
+    }
+
     // Disable newlines in a table. The spec says the following:
     // > Inline tables are intended to appear on a single line. A terminating comma (also called trailing comma)
     // > is not permitted after the last key/value pair in an inline table. No newlines are allowed between the
