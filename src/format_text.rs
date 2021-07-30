@@ -1,9 +1,9 @@
+use super::configuration::Configuration;
+use super::parser::parse_items;
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::formatting::PrintOptions;
 use dprint_core::types::ErrBox;
 use taplo::syntax::SyntaxNode;
-use super::configuration::Configuration;
-use super::parser::parse_items;
 
 pub fn format_text(text: &str, config: &Configuration) -> Result<String, ErrBox> {
     let node = parse_taplo(text)?;
@@ -28,11 +28,13 @@ fn parse_taplo(text: &str) -> Result<SyntaxNode, String> {
     let parse_result = taplo::parser::parse(text);
 
     if let Some(err) = parse_result.errors.get(0) {
-        Err(dprint_core::formatting::utils::string_utils::format_diagnostic(
-            Some((err.range.start().into(), err.range.end().into())),
-            &err.message,
-            text
-        ))
+        Err(
+            dprint_core::formatting::utils::string_utils::format_diagnostic(
+                Some((err.range.start().into(), err.range.end().into())),
+                &err.message,
+                text,
+            ),
+        )
     } else {
         Ok(parse_result.into_syntax())
     }

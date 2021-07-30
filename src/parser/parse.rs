@@ -1,12 +1,12 @@
-use dprint_core::formatting::*;
 use dprint_core::formatting::conditions::*;
-use taplo::syntax::{SyntaxNode, SyntaxToken, SyntaxElement, SyntaxKind};
-use taplo::rowan::NodeOrToken;
+use dprint_core::formatting::*;
 use std::cell::Cell;
 use std::rc::Rc;
+use taplo::rowan::NodeOrToken;
+use taplo::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
-use crate::configuration::Configuration;
 use super::Context;
+use crate::configuration::Configuration;
 
 type PrintItemsResult = Result<PrintItems, ()>;
 
@@ -15,8 +15,10 @@ pub fn parse_items(node: SyntaxNode, text: &str, config: &Configuration) -> Prin
     let mut items = parse_node(node.into(), &mut context);
     items.push_condition(if_true(
         "endOfFileNewLine",
-        |context| Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0),
-        Signal::NewLine.into()
+        |context| {
+            Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0)
+        },
+        Signal::NewLine.into(),
     ));
     items
 }
@@ -56,24 +58,33 @@ fn parse_node_with_inner<'a>(
             SyntaxKind::TABLE_HEADER => parse_table_header(node, context),
             SyntaxKind::TABLE_ARRAY_HEADER => parse_table_array_header(node, context),
             _ => Err(()),
-        }
+        },
         NodeOrToken::Token(token) => match token.kind() {
             SyntaxKind::COMMENT => Ok(parse_comment(token, context)),
-            _ => Ok(parser_helpers::parse_string(token.text().trim().into()))
-        }
+            _ => Ok(parser_helpers::parse_string(token.text().trim().into())),
+        },
     };
 
-    items.extend(inner_parse(match result {
-        Ok(items) => items,
-        Err(()) => parser_helpers::parse_raw_string_trim_line_ends(node.text().trim().into()),
-    }, context));
+    items.extend(inner_parse(
+        match result {
+            Ok(items) => items,
+            Err(()) => parser_helpers::parse_raw_string_trim_line_ends(node.text().trim().into()),
+        },
+        context,
+    ));
 
-    if matches!(node.kind(), SyntaxKind::VALUE | SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER) {
+    if matches!(
+        node.kind(),
+        SyntaxKind::VALUE | SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER
+    ) {
         for comment in node.child_comments() {
             items.extend(parse_comment(comment, context));
         }
     }
-    if node.parent().is_none() || node.parent().unwrap().kind() != SyntaxKind::VALUE || !node.is_last_non_trivia_sibling() {
+    if node.parent().is_none()
+        || node.parent().unwrap().kind() != SyntaxKind::VALUE
+        || !node.is_last_non_trivia_sibling()
+    {
         if let Some(trailing_comment) = get_trailing_comment(node) {
             items.extend(parse_comment(trailing_comment, context));
         }
@@ -93,7 +104,9 @@ fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResu
             let mut items = PrintItems::new();
             if found_first {
                 items.push_signal(Signal::NewLine);
-                if new_line_count.get() > 1 { items.push_signal(Signal::NewLine); }
+                if new_line_count.get() > 1 {
+                    items.push_signal(Signal::NewLine);
+                }
             }
             items.extend(parse_node(element, context));
 
@@ -107,13 +120,13 @@ fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResu
     for element in node.children_with_tokens() {
         match element {
             NodeOrToken::Node(_) => items.extend(parse_element(element)),
-            NodeOrToken::Token(_) => {
-                match element.kind() {
-                    SyntaxKind::NEWLINE => new_line_count.set(new_line_count.get() + element.text().chars().count()),
-                    SyntaxKind::COMMENT => items.extend(parse_element(element)),
-                    _ => {},
+            NodeOrToken::Token(_) => match element.kind() {
+                SyntaxKind::NEWLINE => {
+                    new_line_count.set(new_line_count.get() + element.text().chars().count())
                 }
-            }
+                SyntaxKind::COMMENT => items.extend(parse_element(element)),
+                _ => {}
+            },
         }
     }
 
@@ -124,27 +137,35 @@ fn parse_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsRes
     let values = node.children();
     let open_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_START)?;
     let close_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_END)?;
-    let is_in_inline_table = node.ancestors().any(|a| a.kind() == SyntaxKind::INLINE_TABLE);
+    let is_in_inline_table = node
+        .ancestors()
+        .any(|a| a.kind() == SyntaxKind::INLINE_TABLE);
     let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone());
     ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
 
     Ok(parse_surrounded_by_tokens(
-        |context| parse_comma_separated_values(ParseCommaSeparatedValuesOptions {
-            nodes: values.into_iter().map(|v| v.into()).collect::<Vec<_>>(),
-            prefer_hanging: false,
-            force_use_new_lines,
-            allow_blank_lines: true,
-            single_line_space_at_start: false,
-            single_line_space_at_end: false,
-            custom_single_line_separator: None,
-            multi_line_options: parser_helpers::MultiLineOptions::surround_newlines_indented(),
-            force_possible_newline_at_start: false,
-        }, context),
+        |context| {
+            parse_comma_separated_values(
+                ParseCommaSeparatedValuesOptions {
+                    nodes: values.into_iter().map(|v| v.into()).collect::<Vec<_>>(),
+                    prefer_hanging: false,
+                    force_use_new_lines,
+                    allow_blank_lines: true,
+                    single_line_space_at_start: false,
+                    single_line_space_at_end: false,
+                    custom_single_line_separator: None,
+                    multi_line_options:
+                        parser_helpers::MultiLineOptions::surround_newlines_indented(),
+                    force_possible_newline_at_start: false,
+                },
+                context,
+            )
+        },
         ParseSurroundedByTokensParams {
             open_token,
             close_token,
         },
-        context
+        context,
     ))
 }
 
@@ -229,7 +250,7 @@ struct ParseSurroundedByTokensParams {
 fn parse_surrounded_by_tokens<'a, 'b>(
     parse_inner: impl FnOnce(&mut Context<'a>) -> PrintItems,
     opts: ParseSurroundedByTokensParams,
-    context: &mut Context<'a>
+    context: &mut Context<'a>,
 ) -> PrintItems {
     // parse
     let mut items = PrintItems::new();
@@ -266,68 +287,82 @@ struct ParseCommaSeparatedValuesOptions {
 
 fn parse_comma_separated_values<'a>(
     opts: ParseCommaSeparatedValuesOptions,
-    context: &mut Context<'a>
+    context: &mut Context<'a>,
 ) -> PrintItems {
     let nodes = opts.nodes;
     let indent_width = context.config.indent_width;
     let compute_lines_span = opts.allow_blank_lines; // save time otherwise
-    parser_helpers::parse_separated_values(|is_multi_line_ref| {
-        let mut parsed_nodes = Vec::new();
-        let nodes_count = nodes.len();
-        for (i, value) in nodes.into_iter().enumerate() {
-            let (allow_inline_multi_line, allow_inline_single_line) = (value.kind() == SyntaxKind::INLINE_TABLE, false);
-            let lines_span = if compute_lines_span {
-                Some(parser_helpers::LinesSpan{
-                    start_line: context.get_line_number_at_pos(value.start_including_leading_comments()),
-                    end_line: context.get_line_number_at_pos(value.text_range().end().into()),
-                })
-            } else { None };
-            let items = parser_helpers::new_line_group({
-                let parsed_comma = if i == nodes_count - 1 {
-                    // todo: make this conditional based on config
-                    let is_multi_line = is_multi_line_ref.create_resolver();
-                    if_true(
-                        "commaIfMultiLine",
-                        is_multi_line,
-                        ",".into(),
-                    ).into()
+    parser_helpers::parse_separated_values(
+        |is_multi_line_ref| {
+            let mut parsed_nodes = Vec::new();
+            let nodes_count = nodes.len();
+            for (i, value) in nodes.into_iter().enumerate() {
+                let (allow_inline_multi_line, allow_inline_single_line) =
+                    (value.kind() == SyntaxKind::INLINE_TABLE, false);
+                let lines_span = if compute_lines_span {
+                    Some(parser_helpers::LinesSpan {
+                        start_line: context
+                            .get_line_number_at_pos(value.start_including_leading_comments()),
+                        end_line: context.get_line_number_at_pos(value.text_range().end().into()),
+                    })
                 } else {
-                    ",".into()
+                    None
                 };
-                parse_comma_separated_value(value, parsed_comma, context)
-            });
-            parsed_nodes.push(parser_helpers::ParsedValue {
-                items,
-                lines_span,
-                allow_inline_multi_line,
-                allow_inline_single_line,
-            });
-        }
+                let items = parser_helpers::new_line_group({
+                    let parsed_comma = if i == nodes_count - 1 {
+                        // todo: make this conditional based on config
+                        let is_multi_line = is_multi_line_ref.create_resolver();
+                        if_true("commaIfMultiLine", is_multi_line, ",".into()).into()
+                    } else {
+                        ",".into()
+                    };
+                    parse_comma_separated_value(value, parsed_comma, context)
+                });
+                parsed_nodes.push(parser_helpers::ParsedValue {
+                    items,
+                    lines_span,
+                    allow_inline_multi_line,
+                    allow_inline_single_line,
+                });
+            }
 
-        parsed_nodes
-    }, parser_helpers::ParseSeparatedValuesOptions {
-        prefer_hanging: opts.prefer_hanging,
-        force_use_new_lines: opts.force_use_new_lines,
-        allow_blank_lines: opts.allow_blank_lines,
-        single_line_space_at_start: opts.single_line_space_at_start,
-        single_line_space_at_end: opts.single_line_space_at_end,
-        single_line_separator: opts.custom_single_line_separator.unwrap_or(Signal::SpaceOrNewLine.into()),
-        indent_width,
-        multi_line_options: opts.multi_line_options,
-        force_possible_newline_at_start: opts.force_possible_newline_at_start,
-    }).items
+            parsed_nodes
+        },
+        parser_helpers::ParseSeparatedValuesOptions {
+            prefer_hanging: opts.prefer_hanging,
+            force_use_new_lines: opts.force_use_new_lines,
+            allow_blank_lines: opts.allow_blank_lines,
+            single_line_space_at_start: opts.single_line_space_at_start,
+            single_line_space_at_end: opts.single_line_space_at_end,
+            single_line_separator: opts
+                .custom_single_line_separator
+                .unwrap_or(Signal::SpaceOrNewLine.into()),
+            indent_width,
+            multi_line_options: opts.multi_line_options,
+            force_possible_newline_at_start: opts.force_possible_newline_at_start,
+        },
+    )
+    .items
 }
 
-fn parse_comma_separated_value<'a>(value: SyntaxElement, parsed_comma: PrintItems, context: &mut Context<'a>) -> PrintItems {
+fn parse_comma_separated_value<'a>(
+    value: SyntaxElement,
+    parsed_comma: PrintItems,
+    context: &mut Context<'a>,
+) -> PrintItems {
     let mut items = PrintItems::new();
     let comma_token = get_next_comma_sibling(value.clone());
 
     let parsed_comma = parsed_comma.into_rc_path();
-    items.extend(parse_node_with_inner(value, context, move |mut items, _| {
-        // this Rc clone is necessary because we can't move the captured parsed_comma out of this closure
-        items.push_optional_path(parsed_comma.clone());
-        items
-    }));
+    items.extend(parse_node_with_inner(
+        value,
+        context,
+        move |mut items, _| {
+            // this Rc clone is necessary because we can't move the captured parsed_comma out of this closure
+            items.push_optional_path(parsed_comma.clone());
+            items
+        },
+    ));
 
     // get the trailing comments after the comma token
     if let Some(comma_token) = comma_token {
@@ -385,7 +420,7 @@ fn print_formatted_tree(node: SyntaxNode) {
     }
 }
 
-fn ensure_all_kind(nodes: impl Iterator<Item=SyntaxNode>, kind: SyntaxKind) -> Result<(), ()> {
+fn ensure_all_kind(nodes: impl Iterator<Item = SyntaxNode>, kind: SyntaxKind) -> Result<(), ()> {
     for node in nodes {
         ensure_kind(node.into(), kind)?;
     }
@@ -403,7 +438,11 @@ fn ensure_kind(element: SyntaxElement, kind: SyntaxKind) -> Result<(), ()> {
 #[cfg(debug_assertions)]
 fn debug_assert_kind(element: SyntaxElement, kind: SyntaxKind) {
     if element.kind() != kind {
-        panic!("Debug Assertion: Expected kind {:?}, but was {:?}", kind, element.kind());
+        panic!(
+            "Debug Assertion: Expected kind {:?}, but was {:?}",
+            kind,
+            element.kind()
+        );
     }
 }
 
@@ -412,13 +451,11 @@ fn has_following_newline(token: SyntaxToken) -> bool {
     while let Some(sibling) = element.next_sibling_or_token() {
         element = sibling.clone();
         match sibling {
-            NodeOrToken::Token(token) => {
-                match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::NEWLINE | SyntaxKind::COMMENT => return true,
-                    _ => break,
-                }
-            }
+            NodeOrToken::Token(token) => match token.kind() {
+                SyntaxKind::WHITESPACE => continue,
+                SyntaxKind::NEWLINE | SyntaxKind::COMMENT => return true,
+                _ => break,
+            },
             NodeOrToken::Node(_) => break,
         }
     }
@@ -429,13 +466,11 @@ fn get_next_comma_sibling(mut element: SyntaxElement) -> Option<SyntaxToken> {
     while let Some(sibling) = element.next_sibling_or_token() {
         element = sibling.clone();
         match sibling {
-            NodeOrToken::Token(token) => {
-                match token.kind() {
-                    SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE | SyntaxKind::COMMENT => continue,
-                    SyntaxKind::COMMA => return Some(token),
-                    _ => break,
-                }
-            }
+            NodeOrToken::Token(token) => match token.kind() {
+                SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE | SyntaxKind::COMMENT => continue,
+                SyntaxKind::COMMA => return Some(token),
+                _ => break,
+            },
             NodeOrToken::Node(_) => break,
         }
     }
@@ -446,13 +481,11 @@ fn get_trailing_comment(mut element: SyntaxElement) -> Option<SyntaxToken> {
     while let Some(sibling) = element.next_sibling_or_token() {
         element = sibling.clone();
         match sibling {
-            NodeOrToken::Token(token) => {
-                match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::COMMENT => return Some(token),
-                    _ => break,
-                }
-            }
+            NodeOrToken::Token(token) => match token.kind() {
+                SyntaxKind::WHITESPACE => continue,
+                SyntaxKind::COMMENT => return Some(token),
+                _ => break,
+            },
             NodeOrToken::Node(_) => break,
         }
     }
@@ -465,20 +498,18 @@ fn get_comments_on_previous_lines(mut element: SyntaxElement) -> Vec<SyntaxToken
     while let Some(sibling) = element.prev_sibling_or_token() {
         element = sibling.clone();
         match sibling {
-            NodeOrToken::Token(token) => {
-                match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::NEWLINE => {
-                        if let Some(comment) = pending_comment.take() {
-                            comments.push(comment);
-                        }
-                    },
-                    SyntaxKind::COMMENT => {
-                        pending_comment.replace(token);
-                    },
-                    _ => break,
+            NodeOrToken::Token(token) => match token.kind() {
+                SyntaxKind::WHITESPACE => continue,
+                SyntaxKind::NEWLINE => {
+                    if let Some(comment) = pending_comment.take() {
+                        comments.push(comment);
+                    }
                 }
-            }
+                SyntaxKind::COMMENT => {
+                    pending_comment.replace(token);
+                }
+                _ => break,
+            },
             NodeOrToken::Node(_) => break,
         }
     }
@@ -486,7 +517,7 @@ fn get_comments_on_previous_lines(mut element: SyntaxElement) -> Vec<SyntaxToken
     comments
 }
 
-fn get_children_with_non_trivia_tokens(node: SyntaxNode) -> impl Iterator<Item=SyntaxElement> {
+fn get_children_with_non_trivia_tokens(node: SyntaxNode) -> impl Iterator<Item = SyntaxElement> {
     node.children_with_tokens().filter_map(|c| match c {
         NodeOrToken::Token(token) => {
             if token.kind() != SyntaxKind::WHITESPACE && token.kind() != SyntaxKind::COMMENT {
@@ -542,10 +573,13 @@ impl SyntaxElementExtensions for SyntaxElement {
     fn child_comments(&self) -> Vec<SyntaxToken> {
         match self {
             NodeOrToken::Token(_) => Vec::with_capacity(0),
-            NodeOrToken::Node(node) => node.children_with_tokens().filter_map(|c| match c {
-                NodeOrToken::Token(token) if token.kind() == SyntaxKind::COMMENT => Some(token),
-                _ => None,
-            }).collect(),
+            NodeOrToken::Node(node) => node
+                .children_with_tokens()
+                .filter_map(|c| match c {
+                    NodeOrToken::Token(token) if token.kind() == SyntaxKind::COMMENT => Some(token),
+                    _ => None,
+                })
+                .collect(),
         }
     }
 
@@ -554,14 +588,12 @@ impl SyntaxElementExtensions for SyntaxElement {
         while let Some(sibling) = element.next_sibling_or_token() {
             element = sibling.clone();
             match sibling {
-                NodeOrToken::Token(token) => {
-                    match token.kind() {
-                        SyntaxKind::WHITESPACE => continue,
-                        SyntaxKind::NEWLINE => continue,
-                        SyntaxKind::COMMENT => continue,
-                        _ => return false,
-                    }
-                }
+                NodeOrToken::Token(token) => match token.kind() {
+                    SyntaxKind::WHITESPACE => continue,
+                    SyntaxKind::NEWLINE => continue,
+                    SyntaxKind::COMMENT => continue,
+                    _ => return false,
+                },
                 NodeOrToken::Node(_) => return false,
             }
         }
@@ -575,19 +607,17 @@ impl SyntaxElementExtensions for SyntaxElement {
         while let Some(sibling) = element.prev_sibling_or_token() {
             element = sibling.clone();
             match sibling {
-                NodeOrToken::Token(token) => {
-                    match token.kind() {
-                        SyntaxKind::WHITESPACE => continue,
-                        SyntaxKind::NEWLINE => {
-                            if found_new_line || token.text().chars().count() > 1 {
-                                return true;
-                            } else {
-                                found_new_line = true;
-                            }
-                        },
-                        _ => return false,
+                NodeOrToken::Token(token) => match token.kind() {
+                    SyntaxKind::WHITESPACE => continue,
+                    SyntaxKind::NEWLINE => {
+                        if found_new_line || token.text().chars().count() > 1 {
+                            return true;
+                        } else {
+                            found_new_line = true;
+                        }
                     }
-                }
+                    _ => return false,
+                },
                 NodeOrToken::Node(_) => return false,
             }
         }
@@ -601,19 +631,17 @@ impl SyntaxElementExtensions for SyntaxElement {
         while let Some(sibling) = element.next_sibling_or_token() {
             element = sibling.clone();
             match sibling {
-                NodeOrToken::Token(token) => {
-                    match token.kind() {
-                        SyntaxKind::WHITESPACE => continue,
-                        SyntaxKind::NEWLINE => {
-                            if found_new_line || token.text().chars().count() > 1 {
-                                return true;
-                            } else {
-                                found_new_line = true;
-                            }
-                        },
-                        _ => return false,
+                NodeOrToken::Token(token) => match token.kind() {
+                    SyntaxKind::WHITESPACE => continue,
+                    SyntaxKind::NEWLINE => {
+                        if found_new_line || token.text().chars().count() > 1 {
+                            return true;
+                        } else {
+                            found_new_line = true;
+                        }
                     }
-                }
+                    _ => return false,
+                },
                 NodeOrToken::Node(_) => return false,
             }
         }
