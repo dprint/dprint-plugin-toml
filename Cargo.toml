@@ -1,6 +1,6 @@
 [package]
 name = "dprint-plugin-toml"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["David Sherret <dsherret@gmail.com>"]
 description = "TOML formatter for dprint."
 edition = "2018"
