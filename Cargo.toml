@@ -2,12 +2,12 @@
 name = "dprint-plugin-toml"
 version = "0.3.2"
 authors = ["David Sherret <dsherret@gmail.com>"]
-description = "TOML formatter for dprint."
 edition = "2018"
 homepage = "https://github.com/dprint/dprint-plugin-toml"
 keywords = ["formatting", "formatter", "toml"]
 license = "MIT"
 repository = "https://github.com/dprint/dprint-plugin-toml"
+description = "TOML formatter for dprint."
 
 [lib]
 crate-type = ["lib", "cdylib"]
