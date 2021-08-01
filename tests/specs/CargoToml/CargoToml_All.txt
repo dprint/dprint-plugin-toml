@@ -130,3 +130,25 @@ test2 = "5" # 4
 test3 = "5" # 6
 test4 = "5" # 1
 # 9
+
+== should have name and version at the front and description at the end of package ==
+[package]
+name = "deno"
+version = "1.12.2"
+license = "MIT"
+authors = ["the Deno authors"]
+edition = "2018"
+description = "Provides the deno executable"
+repository = "https://github.com/denoland/deno"
+default-run = "deno"
+
+[expect]
+[package]
+name = "deno"
+version = "1.12.2"
+authors = ["the Deno authors"]
+default-run = "deno"
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/denoland/deno"
+description = "Provides the deno executable"

@@ -42,12 +42,13 @@ fn sort_cargo_package_section(left: &SyntaxNode, right: &SyntaxNode) -> Ordering
         left.entry_key_text().as_str(),
         right.entry_key_text().as_str(),
     ) {
-        ("name", _) => Ordering::Less,
         ("version", "name") => Ordering::Greater,
+        ("name", _) => Ordering::Less,
         ("version", _) => Ordering::Less,
         ("description", _) => Ordering::Greater,
         (_, "name") => Ordering::Greater,
         (_, "version") => Ordering::Greater,
+        (_, "description") => Ordering::Less,
 
         (left, right) => left.cmp(right),
     }
