@@ -21,16 +21,14 @@ pub fn apply_cargo_toml_conventions(node: SyntaxNode) -> SyntaxNode {
 
     while let Some(child) = children.next() {
         if child.text() == "[package]" {
-            let mut package_section = Section::new(&child, &mut children);
-            package_section.apply_formatting_conventions(sort_cargo_package_section);
-            package_section.insert(&node);
+            let section_children = get_section_children(&mut children);
+            sort_nodes(&node, &child, section_children, sort_cargo_package_section);
         }
         if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]" {
-            let mut package_section = Section::new(&child, &mut children);
-            package_section.apply_formatting_conventions(|left, right| {
+            let section_children = get_section_children(&mut children);
+            sort_nodes(&node, &child, section_children, |left, right| {
                 left.entry_key_text().cmp(&right.entry_key_text())
             });
-            package_section.insert(&node);
         }
     }
 
@@ -54,48 +52,36 @@ fn sort_cargo_package_section(left: &SyntaxNode, right: &SyntaxNode) -> Ordering
     }
 }
 
-#[derive(Debug)]
-struct Section {
-    nodes: Vec<SyntaxNode>,
-    table_header_index: usize,
+fn get_section_children(
+    children: &mut Peekable<impl Iterator<Item = SyntaxNode>>,
+) -> Vec<SyntaxNode> {
+    let mut nodes = vec![];
+
+    while let Some(entry) = children.next_if(|child| child.kind() == SyntaxKind::ENTRY) {
+        nodes.push(entry);
+    }
+
+    nodes
 }
 
-impl Section {
-    fn new(
-        table_header: &SyntaxNode,
-        tree: &mut Peekable<impl Iterator<Item = SyntaxNode>>,
-    ) -> Self {
-        let mut nodes = vec![];
+fn sort_nodes(
+    parent: &SyntaxNode,
+    table_header: &SyntaxNode,
+    mut children: Vec<SyntaxNode>,
+    cmp: impl FnMut(&SyntaxNode, &SyntaxNode) -> Ordering,
+) {
+    children.sort_by(cmp);
 
-        while let Some(entry) = tree.next_if(|child| child.kind() == SyntaxKind::ENTRY) {
-            nodes.push(entry);
-        }
+    let start = table_header.index() + 1;
+    let end = start + children.len();
+    let mut nodes_and_comments = Vec::new();
 
-        Self {
-            nodes,
-            table_header_index: table_header.index(),
-        }
+    for node in children.into_iter() {
+        nodes_and_comments.extend(node.get_previous_trivia().into_iter().map(|c| c.into()));
+        nodes_and_comments.push(node.into());
     }
 
-    fn apply_formatting_conventions(
-        &mut self,
-        cmp: impl FnMut(&SyntaxNode, &SyntaxNode) -> Ordering,
-    ) {
-        self.nodes.sort_by(cmp);
-    }
-
-    fn insert(self, node: &SyntaxNode) {
-        let start = self.table_header_index + 1;
-        let end = start + self.nodes.len();
-        let mut nodes_and_comments = Vec::new();
-
-        for node in self.nodes.into_iter() {
-            nodes_and_comments.extend(node.get_previous_trivia().into_iter().map(|c| c.into()));
-            nodes_and_comments.push(node.into());
-        }
-
-        node.splice_children(start..end, nodes_and_comments)
-    }
+    parent.splice_children(start..end, nodes_and_comments)
 }
 
 trait SyntaxNodeExt {
