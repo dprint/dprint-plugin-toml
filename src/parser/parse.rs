@@ -7,6 +7,7 @@ use taplo::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 use super::Context;
 use crate::configuration::Configuration;
+use crate::rowan_extensions::SyntaxElementExtensions;
 
 type PrintItemsResult = Result<PrintItems, ()>;
 
@@ -36,7 +37,7 @@ fn parse_node_with_inner<'a>(
     // println!("{:?}", node);
 
     if node.kind() != SyntaxKind::COMMENT {
-        for comment in get_comments_on_previous_lines(node.clone()) {
+        for comment in node.get_comments_on_previous_lines() {
             if !context.has_handled_comment(comment.text_range().start().into()) {
                 items.extend(parse_comment(comment.clone(), context));
                 items.push_signal(Signal::NewLine);
@@ -96,18 +97,21 @@ fn parse_node_with_inner<'a>(
 fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
     // print_formatted_tree(node.clone());
 
-    let mut found_first = false;
     let new_line_count = Rc::new(Cell::new(0));
     let mut parse_element = {
+        let mut found_first = false;
+        let mut last_node_kind = None;
         let new_line_count = new_line_count.clone();
         move |element: SyntaxElement| {
             let mut items = PrintItems::new();
             if found_first {
                 items.push_signal(Signal::NewLine);
-                if new_line_count.get() > 1 {
+                if new_line_count.get() > 1 && allow_blank_line(last_node_kind, element.kind()) {
                     items.push_signal(Signal::NewLine);
                 }
             }
+
+            last_node_kind = Some(element.kind());
             items.extend(parse_node(element, context));
 
             found_first = true;
@@ -131,6 +135,20 @@ fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResu
     }
 
     Ok(items)
+}
+
+fn allow_blank_line(previous_kind: Option<SyntaxKind>, current_kind: SyntaxKind) -> bool {
+    if matches!(
+        current_kind,
+        SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER
+    ) {
+        true
+    } else {
+        !matches!(
+            previous_kind,
+            Some(SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER)
+        )
+    }
 }
 
 fn parse_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
@@ -268,7 +286,8 @@ fn parse_surrounded_by_tokens<'a, 'b>(
     let before_trailing_comments_info = Info::new("beforeTrailingComments");
     items.push_info(before_trailing_comments_info);
 
-    for comment in get_comments_on_previous_lines(opts.close_token.clone().into()) {
+    let close_token: SyntaxElement = opts.close_token.into();
+    for comment in close_token.get_comments_on_previous_lines() {
         if NodeOrToken::Token(comment.clone()).has_leading_blank_line() {
             items.push_signal(Signal::NewLine);
         }
@@ -276,7 +295,7 @@ fn parse_surrounded_by_tokens<'a, 'b>(
         items.push_signal(Signal::NewLine);
     }
 
-    items.extend(parse_node(opts.close_token.into(), context));
+    items.extend(parse_node(close_token, context));
     items
 }
 
@@ -499,31 +518,6 @@ fn get_trailing_comment(mut element: SyntaxElement) -> Option<SyntaxToken> {
     None
 }
 
-fn get_comments_on_previous_lines(mut element: SyntaxElement) -> Vec<SyntaxToken> {
-    let mut comments = Vec::new();
-    let mut pending_comment = None;
-    while let Some(sibling) = element.prev_sibling_or_token() {
-        element = sibling.clone();
-        match sibling {
-            NodeOrToken::Token(token) => match token.kind() {
-                SyntaxKind::WHITESPACE => continue,
-                SyntaxKind::NEWLINE => {
-                    if let Some(comment) = pending_comment.take() {
-                        comments.push(comment);
-                    }
-                }
-                SyntaxKind::COMMENT => {
-                    pending_comment.replace(token);
-                }
-                _ => break,
-            },
-            NodeOrToken::Node(_) => break,
-        }
-    }
-    comments.reverse();
-    comments
-}
-
 fn get_children_with_non_trivia_tokens(node: SyntaxNode) -> impl Iterator<Item = SyntaxElement> {
     node.children_with_tokens().filter_map(|c| match c {
         NodeOrToken::Token(token) => {
@@ -548,111 +542,5 @@ fn get_token_with_kind(node: SyntaxNode, kind: SyntaxKind) -> Result<SyntaxToken
     match node.children_with_tokens().find(|c| c.kind() == kind) {
         Some(NodeOrToken::Token(token)) => Ok(token),
         _ => Err(()),
-    }
-}
-
-pub trait SyntaxElementExtensions {
-    fn text(&self) -> String;
-    fn start_including_leading_comments(&self) -> usize;
-    fn child_comments(&self) -> Vec<SyntaxToken>;
-    fn is_last_non_trivia_sibling(&self) -> bool;
-    fn has_leading_blank_line(&self) -> bool;
-    fn has_trailing_blank_line(&self) -> bool;
-}
-
-impl SyntaxElementExtensions for SyntaxElement {
-    fn text(&self) -> String {
-        match self {
-            NodeOrToken::Node(node) => node.text().to_string(),
-            NodeOrToken::Token(token) => token.text().to_string(),
-        }
-    }
-
-    fn start_including_leading_comments(&self) -> usize {
-        let result = get_comments_on_previous_lines(self.clone());
-        if let Some(comment) = result.get(0) {
-            comment.text_range().start().into()
-        } else {
-            self.text_range().start().into()
-        }
-    }
-
-    fn child_comments(&self) -> Vec<SyntaxToken> {
-        match self {
-            NodeOrToken::Token(_) => Vec::with_capacity(0),
-            NodeOrToken::Node(node) => node
-                .children_with_tokens()
-                .filter_map(|c| match c {
-                    NodeOrToken::Token(token) if token.kind() == SyntaxKind::COMMENT => Some(token),
-                    _ => None,
-                })
-                .collect(),
-        }
-    }
-
-    fn is_last_non_trivia_sibling(&self) -> bool {
-        let mut element = self.clone();
-        while let Some(sibling) = element.next_sibling_or_token() {
-            element = sibling.clone();
-            match sibling {
-                NodeOrToken::Token(token) => match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::NEWLINE => continue,
-                    SyntaxKind::COMMENT => continue,
-                    _ => return false,
-                },
-                NodeOrToken::Node(_) => return false,
-            }
-        }
-
-        true
-    }
-
-    fn has_leading_blank_line(&self) -> bool {
-        let mut element = self.clone();
-        let mut found_new_line = false;
-        while let Some(sibling) = element.prev_sibling_or_token() {
-            element = sibling.clone();
-            match sibling {
-                NodeOrToken::Token(token) => match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::NEWLINE => {
-                        if found_new_line || token.text().chars().count() > 1 {
-                            return true;
-                        } else {
-                            found_new_line = true;
-                        }
-                    }
-                    _ => return false,
-                },
-                NodeOrToken::Node(_) => return false,
-            }
-        }
-
-        false
-    }
-
-    fn has_trailing_blank_line(&self) -> bool {
-        let mut element = self.clone();
-        let mut found_new_line = false;
-        while let Some(sibling) = element.next_sibling_or_token() {
-            element = sibling.clone();
-            match sibling {
-                NodeOrToken::Token(token) => match token.kind() {
-                    SyntaxKind::WHITESPACE => continue,
-                    SyntaxKind::NEWLINE => {
-                        if found_new_line || token.text().chars().count() > 1 {
-                            return true;
-                        } else {
-                            found_new_line = true;
-                        }
-                    }
-                    _ => return false,
-                },
-                NodeOrToken::Node(_) => return false,
-            }
-        }
-
-        false
     }
 }
