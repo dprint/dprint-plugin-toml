@@ -106,3 +106,27 @@ tokio = { version = "0.2", features = ["macros"] }
 [features]
 default = []
 test = ["libp2p/yamux", "libp2p/noise"]
+
+== should handle comments between key value pairs in dependencies ==
+[dependencies]
+test4 = "5" # 1
+# 2
+# 3
+test2 = "5" # 4
+# 5
+test3 = "5" # 6
+# 7
+test1 = "5" # 8
+# 9
+
+[expect]
+[dependencies]
+# 7
+test1 = "5" # 8
+# 2
+# 3
+test2 = "5" # 4
+# 5
+test3 = "5" # 6
+test4 = "5" # 1
+# 9

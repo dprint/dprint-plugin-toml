@@ -1,8 +1,10 @@
 use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::path::Path;
-use taplo::rowan::SyntaxElement;
-use taplo::syntax::{SyntaxKind, SyntaxNode};
+use taplo::{
+    rowan::NodeOrToken,
+    syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken},
+};
 
 pub fn is_cargo_toml_file(file_path: &Path) -> bool {
     // don't need to worry about different casing because Cargo.toml will
@@ -84,16 +86,20 @@ impl Section {
     fn insert(self, node: &SyntaxNode) {
         let start = self.table_header_index + 1;
         let end = start + self.nodes.len();
+        let mut nodes_and_comments = Vec::new();
 
-        node.splice_children(
-            start..end,
-            self.nodes.into_iter().map(SyntaxElement::Node).collect(),
-        )
+        for node in self.nodes.into_iter() {
+            nodes_and_comments.extend(node.get_previous_trivia().into_iter().map(|c| c.into()));
+            nodes_and_comments.push(node.into());
+        }
+
+        node.splice_children(start..end, nodes_and_comments)
     }
 }
 
 trait SyntaxNodeExt {
     fn entry_key_text(&self) -> String;
+    fn get_previous_trivia(&self) -> Vec<SyntaxToken>;
 }
 
 impl SyntaxNodeExt for SyntaxNode {
@@ -112,5 +118,24 @@ impl SyntaxNodeExt for SyntaxNode {
             .expect("KEY should contain IDENT");
 
         ident.to_string()
+    }
+
+    fn get_previous_trivia(&self) -> Vec<SyntaxToken> {
+        let mut trivia = Vec::new();
+        let mut element: SyntaxElement = self.clone().into();
+        while let Some(sibling) = element.prev_sibling_or_token() {
+            element = sibling.clone();
+            match sibling {
+                NodeOrToken::Token(token) => match token.kind() {
+                    SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE | SyntaxKind::COMMENT => {
+                        trivia.push(token)
+                    }
+                    _ => break,
+                },
+                NodeOrToken::Node(_) => break,
+            }
+        }
+        trivia.reverse();
+        trivia
     }
 }
