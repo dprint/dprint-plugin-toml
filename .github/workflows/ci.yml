@@ -140,8 +140,7 @@ jobs:
         token: ${{ secrets.CI_REPO_PAT }} # github.token is scoped to current repo, so use this to push to other repo
         path: dprint-plugins
     - name: Plugin publish
-      # todo: re-enable when actually doing this
-      if: false #matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
           cd dprint-plugins
           node scripts/replace-plugin.js dprint-plugin-toml ${{ steps.get_tag_version.outputs.TAG_VERSION }} toml-${{ steps.get_tag_version.outputs.TAG_VERSION }}
