@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use dprint_core::configuration::*;
 use dprint_development::*;
-use dprint_plugin_toml::configuration::resolve_config;
+use dprint_plugin_toml::configuration::{resolve_config, ConfigurationBuilder};
 use dprint_plugin_toml::*;
 
 #[test]
@@ -54,4 +54,12 @@ fn test_specs() {
             panic!("\n====\nPlease run with `cargo test --features tracing` to get trace output\n====\n")
         },
     )
+}
+
+#[test]
+fn should_handle_windows_newlines() {
+    let config = ConfigurationBuilder::new().build();
+    let file_text = format_text(&PathBuf::from("file.toml"), "# 1\r\n# 2\r\n", &config).unwrap();
+
+    assert_eq!(file_text, "# 1\n# 2\n");
 }

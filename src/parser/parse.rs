@@ -7,7 +7,7 @@ use taplo::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 use super::Context;
 use crate::configuration::Configuration;
-use crate::rowan_extensions::SyntaxElementExtensions;
+use crate::rowan_extensions::*;
 
 type PrintItemsResult = Result<PrintItems, ()>;
 
@@ -97,11 +97,11 @@ fn parse_node_with_inner<'a>(
 fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
     // print_formatted_tree(node.clone());
 
-    let new_line_count = Rc::new(Cell::new(0));
+    let newline_count = Rc::new(Cell::new(0));
     let mut parse_element = {
         let mut found_first = false;
         let mut last_node_kind = None;
-        let new_line_count = new_line_count.clone();
+        let new_line_count = newline_count.clone();
         move |element: SyntaxElement| {
             let mut items = PrintItems::new();
             if found_first {
@@ -124,11 +124,11 @@ fn parse_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResu
     for element in node.children_with_tokens() {
         match element {
             NodeOrToken::Node(_) => items.extend(parse_element(element)),
-            NodeOrToken::Token(_) => match element.kind() {
+            NodeOrToken::Token(token) => match token.kind() {
                 SyntaxKind::NEWLINE => {
-                    new_line_count.set(new_line_count.get() + element.text().chars().count())
+                    newline_count.set(newline_count.get() + token.newline_count())
                 }
-                SyntaxKind::COMMENT => items.extend(parse_element(element)),
+                SyntaxKind::COMMENT => items.extend(parse_element(token.into())),
                 _ => {}
             },
         }

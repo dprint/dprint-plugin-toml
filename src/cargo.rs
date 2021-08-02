@@ -6,6 +6,8 @@ use taplo::{
     syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken},
 };
 
+use crate::rowan_extensions::*;
+
 pub fn is_cargo_toml_file(file_path: &Path) -> bool {
     // don't need to worry about different casing because Cargo.toml will
     // always have this same casing https://github.com/rust-lang/cargo/issues/45
@@ -207,7 +209,7 @@ impl SyntaxNodeExt for SyntaxNode {
                 NodeOrToken::Token(token) => match token.kind() {
                     SyntaxKind::COMMENT => last_was_newline = false,
                     SyntaxKind::NEWLINE => {
-                        if last_was_newline || token.text().chars().count() > 1 {
+                        if last_was_newline || token.newline_count() > 1 {
                             return true;
                         }
                         last_was_newline = true;

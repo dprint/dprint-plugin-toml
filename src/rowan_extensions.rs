@@ -70,7 +70,7 @@ impl SyntaxElementExtensions for SyntaxElement {
                 NodeOrToken::Token(token) => match token.kind() {
                     SyntaxKind::WHITESPACE => continue,
                     SyntaxKind::NEWLINE => {
-                        if found_new_line || token.text().chars().count() > 1 {
+                        if found_new_line || token.newline_count() > 1 {
                             return true;
                         } else {
                             found_new_line = true;
@@ -94,7 +94,7 @@ impl SyntaxElementExtensions for SyntaxElement {
                 NodeOrToken::Token(token) => match token.kind() {
                     SyntaxKind::WHITESPACE => continue,
                     SyntaxKind::NEWLINE => {
-                        if found_new_line || token.text().chars().count() > 1 {
+                        if found_new_line || token.newline_count() > 1 {
                             return true;
                         } else {
                             found_new_line = true;
@@ -133,5 +133,15 @@ impl SyntaxElementExtensions for SyntaxElement {
         }
         comments.reverse();
         comments
+    }
+}
+
+pub trait SyntaxTokenExtensions {
+    fn newline_count(&self) -> usize;
+}
+
+impl SyntaxTokenExtensions for SyntaxToken {
+    fn newline_count(&self) -> usize {
+        self.text().chars().filter(|c| *c == '\n').count()
     }
 }
