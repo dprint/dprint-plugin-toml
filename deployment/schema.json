@@ -32,6 +32,18 @@
         "const": "system",
         "description": "Uses the system standard (ex. crlf on Windows)."
       }]
+    },
+    "comment.forceLeadingSpace": {
+      "description": "Whether to force a leading space in a comment.",
+      "type": "boolean",
+      "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": "Adds a leading space if there is none (ex. `# comment`)"
+      }, {
+        "const": false,
+        "description": "Doesn't force a space to be added and maintains what was done (ex. `#comment`)"
+      }]
     }
   },
   "properties": {

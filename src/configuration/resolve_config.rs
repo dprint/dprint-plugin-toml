@@ -61,6 +61,12 @@ pub fn resolve_config(
                 .unwrap_or(DEFAULT_GLOBAL_CONFIGURATION.new_line_kind),
             &mut diagnostics,
         ),
+        comment_force_leading_space: get_value(
+            &mut config,
+            "comment.forceLeadingSpace",
+            true,
+            &mut diagnostics,
+        ),
     };
 
     diagnostics.extend(get_unknown_property_diagnostics(config));

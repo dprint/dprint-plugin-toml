@@ -8,4 +8,5 @@ pub struct Configuration {
     pub use_tabs: bool,
     pub indent_width: u8,
     pub new_line_kind: NewLineKind,
+    pub comment_force_leading_space: bool,
 }

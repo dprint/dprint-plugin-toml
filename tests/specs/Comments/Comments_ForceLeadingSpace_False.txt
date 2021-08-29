@@ -1,0 +1,22 @@
+~~ comment.forceLeadingSpace: false ~~
+== should not force a leading space ==
+#test
+##test
+# test
+#  test
+#   test
+#    test
+
+[expect]
+#test
+##test
+# test
+#  test
+#   test
+#    test
+
+== should ignore if there's a tab ==
+#	test
+
+[expect]
+#	test

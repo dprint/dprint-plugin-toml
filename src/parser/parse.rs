@@ -421,9 +421,46 @@ fn parse_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintIt
         |context| Some(condition_resolvers::is_start_of_line(context)),
         " ".into(),
     ));
-    items.extend(parser_helpers::parse_raw_string(comment.text()));
+    items.extend({
+        if context.config.comment_force_leading_space {
+            let info = get_comment_text_info(comment.text());
+            let mut text = "#".repeat(info.leading_hashes_count);
+            if !info.has_leading_whitespace {
+                text.push_str(" ");
+            }
+            text.push_str(&comment.text()[info.leading_hashes_count..]);
+            parser_helpers::parse_raw_string(&text)
+        } else {
+            parser_helpers::parse_raw_string(comment.text())
+        }
+    });
     items.push_signal(Signal::ExpectNewLine);
     items
+}
+
+struct CommentTextInfo {
+    pub has_leading_whitespace: bool,
+    pub leading_hashes_count: usize,
+}
+
+fn get_comment_text_info(text: &str) -> CommentTextInfo {
+    let mut chars = text.chars();
+    let mut leading_hashes_count = 0;
+    let mut has_leading_whitespace = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '#' => leading_hashes_count += 1,
+            ' ' | '\t' => {
+                has_leading_whitespace = true;
+                break;
+            }
+            _ => break,
+        }
+    }
+    CommentTextInfo {
+        leading_hashes_count,
+        has_leading_whitespace,
+    }
 }
 
 #[allow(dead_code)]

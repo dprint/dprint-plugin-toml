@@ -72,6 +72,12 @@ impl ConfigurationBuilder {
         self.insert("newLineKind", value.to_string().into())
     }
 
+    /// Forces a leading space after the hashes.
+    /// Default: `true`
+    pub fn comment_force_leading_space(&mut self, value: bool) -> &mut Self {
+        self.insert("comment.forceLeadingSpace", value.into())
+    }
+
     #[cfg(test)]
     pub(super) fn get_inner_config(&self) -> ConfigKeyMap {
         self.config.clone()
@@ -98,10 +104,11 @@ mod tests {
             .line_width(90)
             .use_tabs(true)
             .indent_width(4)
-            .new_line_kind(NewLineKind::CarriageReturnLineFeed);
+            .new_line_kind(NewLineKind::CarriageReturnLineFeed)
+            .comment_force_leading_space(false);
 
         let inner_config = config.get_inner_config();
-        assert_eq!(inner_config.len(), 4);
+        assert_eq!(inner_config.len(), 5);
         let diagnostics =
             resolve_config(inner_config, &resolve_global_config(HashMap::new()).config).diagnostics;
         assert_eq!(diagnostics.len(), 0);
