@@ -76,6 +76,12 @@ impl ConfigurationBuilder {
     self.insert("comment.forceLeadingSpace", value.into())
   }
 
+  /// Whether to apply sorting to a Cargo.toml file.
+  /// Default: `true`
+  pub fn cargo_apply_conventions(&mut self, value: bool) -> &mut Self {
+    self.insert("cargo.applyConventions", value.into())
+  }
+
   #[cfg(test)]
   pub(super) fn get_inner_config(&self) -> ConfigKeyMap {
     self.config.clone()
@@ -103,10 +109,11 @@ mod tests {
       .use_tabs(true)
       .indent_width(4)
       .new_line_kind(NewLineKind::CarriageReturnLineFeed)
-      .comment_force_leading_space(false);
+      .comment_force_leading_space(false)
+      .cargo_apply_conventions(false);
 
     let inner_config = config.get_inner_config();
-    assert_eq!(inner_config.len(), 5);
+    assert_eq!(inner_config.len(), 6);
     let diagnostics = resolve_config(inner_config, &resolve_global_config(HashMap::new()).config).diagnostics;
     assert_eq!(diagnostics.len(), 0);
   }

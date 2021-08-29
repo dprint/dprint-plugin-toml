@@ -1,0 +1,43 @@
+-- Cargo.toml --
+~~ cargo.applyConventions: false ~~
+== should format as-is ==
+[package]
+authors = ["Some author"]
+name = "package"
+description = "Description"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+b = "0.1"
+a = { version = "0.8", features = ["serde", "v4"] }
+
+[dev-dependencies]
+c = "0.1"
+a = { version = "0.8", features = ["serde", "v4"] }
+b = "0.2"
+
+[features]
+default = []
+test = ["feature"]
+
+[expect]
+[package]
+authors = ["Some author"]
+name = "package"
+description = "Description"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+b = "0.1"
+a = { version = "0.8", features = ["serde", "v4"] }
+
+[dev-dependencies]
+c = "0.1"
+a = { version = "0.8", features = ["serde", "v4"] }
+b = "0.2"
+
+[features]
+default = []
+test = ["feature"]

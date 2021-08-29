@@ -8,7 +8,7 @@ use std::path::Path;
 use taplo::syntax::SyntaxNode;
 
 pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<String, ErrBox> {
-  let node = parse_and_process_node(file_path, text)?;
+  let node = parse_and_process_node(file_path, text, config)?;
 
   Ok(dprint_core::formatting::format(
     || parse_items(node, text, config),
@@ -23,10 +23,10 @@ pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprin
   dprint_core::formatting::trace_printing(|| parse_items(node, text, config), config_to_print_options(text, config))
 }
 
-fn parse_and_process_node(file_path: &Path, text: &str) -> Result<SyntaxNode, String> {
+fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<SyntaxNode, String> {
   let node = parse_taplo(text)?;
 
-  Ok(if cargo::is_cargo_toml_file(file_path) {
+  Ok(if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
     cargo::apply_cargo_toml_conventions(node)
   } else {
     node

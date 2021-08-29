@@ -36,13 +36,25 @@
     "comment.forceLeadingSpace": {
       "description": "Whether to force a leading space in a comment.",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "oneOf": [{
         "const": true,
         "description": "Adds a leading space if there is none (ex. `# comment`)"
       }, {
         "const": false,
         "description": "Doesn't force a space to be added and maintains what was done (ex. `#comment`)"
+      }]
+    },
+    "cargo.applyConventions": {
+      "description": "Whether to apply sorting to a Cargo.toml file.",
+      "type": "boolean",
+      "default": true,
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
       }]
     }
   },
@@ -73,6 +85,9 @@
     },
     "comment.forceLeadingSpace": {
       "$ref": "#/definitions/comment.forceLeadingSpace"
+    },
+    "cargo.applyConventions": {
+      "$ref": "#/definitions/cargo.applyConventions"
     }
   }
 }

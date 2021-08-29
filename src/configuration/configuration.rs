@@ -9,4 +9,5 @@ pub struct Configuration {
   pub indent_width: u8,
   pub new_line_kind: NewLineKind,
   pub comment_force_leading_space: bool,
+  pub cargo_apply_conventions: bool,
 }

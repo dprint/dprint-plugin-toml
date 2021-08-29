@@ -48,6 +48,7 @@ pub fn resolve_config(config: ConfigKeyMap, global_config: &GlobalConfiguration)
       &mut diagnostics,
     ),
     comment_force_leading_space: get_value(&mut config, "comment.forceLeadingSpace", true, &mut diagnostics),
+    cargo_apply_conventions: get_value(&mut config, "cargo.applyConventions", true, &mut diagnostics),
   };
 
   diagnostics.extend(get_unknown_property_diagnostics(config));
