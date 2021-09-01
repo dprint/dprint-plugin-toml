@@ -387,11 +387,14 @@ fn parse_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintIt
   items.extend({
     if context.config.comment_force_leading_space {
       let info = get_comment_text_info(comment.text());
+      let after_hash_text = &comment.text()[info.leading_hashes_count..].trim_end();
       let mut text = "#".repeat(info.leading_hashes_count);
-      if !info.has_leading_whitespace {
-        text.push_str(" ");
+      if !after_hash_text.is_empty() {
+        if !info.has_leading_whitespace {
+          text.push_str(" ");
+        }
+        text.push_str(after_hash_text);
       }
-      text.push_str(&comment.text()[info.leading_hashes_count..]);
       parser_helpers::parse_raw_string(&text)
     } else {
       parser_helpers::parse_raw_string(comment.text())

@@ -1,5 +1,6 @@
 ~~ comment.forceLeadingSpace: true ~~
 == should force a leading space ==
+#
 #test
 ##test
 # test
@@ -8,6 +9,7 @@
 #    test
 
 [expect]
+#
 # test
 ## test
 # test
