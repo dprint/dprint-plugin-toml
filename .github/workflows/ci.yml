@@ -81,10 +81,9 @@ jobs:
       if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: cargo login ${{ secrets.CRATES_TOKEN }}
 
-    # temporarily disabled until we stop depending on the taplo fork
-    # - name: Cargo publish
-    #  if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
-    #  run: cargo publish
+    - name: Cargo publish
+      if: matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: cargo publish
 
       # GITHUB RELEASE
     - name: Pre-release
