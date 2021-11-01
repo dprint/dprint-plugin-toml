@@ -18,7 +18,7 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
 
 #[cfg(feature = "tracing")]
 pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprint_core::formatting::TracingResult {
-  let node = parse_and_process_node(file_path, text).unwrap();
+  let node = parse_and_process_node(file_path, text, config).unwrap();
 
   dprint_core::formatting::trace_printing(|| parse_items(node, text, config), config_to_print_options(text, config))
 }
