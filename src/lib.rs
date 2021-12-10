@@ -1,7 +1,7 @@
 mod cargo;
 pub mod configuration;
 mod format_text;
-mod parser;
+mod generation;
 mod rowan_extensions;
 
 pub use format_text::format_text;
