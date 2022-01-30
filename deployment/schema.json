@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://plugins.dprint.dev/schemas/toml-0.0.0.json",
+  "$id": "https://plugins.dprint.dev/dprint/dprint-plugin-toml/0.0.0/schema.json",
   "type": "object",
   "definitions": {
     "useTabs": {

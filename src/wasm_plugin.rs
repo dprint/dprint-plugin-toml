@@ -28,7 +28,8 @@ impl PluginHandler<Configuration> for TomlPluginHandler {
       file_extensions: vec!["toml".to_string()],
       file_names: vec![],
       help_url: "https://dprint.dev/plugins/toml".to_string(),
-      config_schema_url: format!("https://plugins.dprint.dev/schemas/toml-{}.json", version),
+      config_schema_url: format!("https://plugins.dprint.dev/dprint/dprint-plugin-toml/{}/schema.json", version),
+      update_url: Some("https://plugins.dprint.dev/dprint/dprint-plugin-toml/latest.json".to_string()),
     }
   }
 
