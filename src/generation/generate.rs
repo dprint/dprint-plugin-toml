@@ -3,7 +3,10 @@ use dprint_core::formatting::*;
 use std::cell::Cell;
 use std::rc::Rc;
 use taplo::rowan::NodeOrToken;
-use taplo::syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
+use taplo::syntax::SyntaxElement;
+use taplo::syntax::SyntaxKind;
+use taplo::syntax::SyntaxNode;
+use taplo::syntax::SyntaxToken;
 
 use super::Context;
 use crate::configuration::Configuration;
@@ -16,7 +19,7 @@ pub fn generate(node: SyntaxNode, text: &str, config: &Configuration) -> PrintIt
   let mut items = gen_node(node.into(), &mut context);
   items.push_condition(if_true(
     "endOfFileNewLine",
-    |context| Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0),
+    Rc::new(|context| Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0)),
     Signal::NewLine.into(),
   ));
   items
@@ -375,11 +378,7 @@ fn gen_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintItem
   debug_assert_kind(comment.clone().into(), SyntaxKind::COMMENT);
 
   let mut items = PrintItems::new();
-  items.push_condition(if_false(
-    "spaceIfNotStartOfLine",
-    |context| Some(condition_resolvers::is_start_of_line(context)),
-    " ".into(),
-  ));
+  items.push_condition(if_false("spaceIfNotStartOfLine", condition_resolvers::is_start_of_line(), " ".into()));
   items.extend({
     if context.config.comment_force_leading_space {
       let info = get_comment_text_info(comment.text());

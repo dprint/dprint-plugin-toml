@@ -3,19 +3,19 @@ extern crate dprint_plugin_toml;
 
 //#[macro_use] extern crate debug_here;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 // use std::time::Instant;
 
 use dprint_core::configuration::*;
 use dprint_development::*;
-use dprint_plugin_toml::configuration::{resolve_config, ConfigurationBuilder};
+use dprint_plugin_toml::configuration::resolve_config;
+use dprint_plugin_toml::configuration::ConfigurationBuilder;
 use dprint_plugin_toml::*;
 
 #[test]
 fn test_specs() {
   //debug_here!();
-  let global_config = resolve_global_config(HashMap::new(), &Default::default()).config;
+  let global_config = resolve_global_config(ConfigKeyMap::new(), &Default::default()).config;
 
   run_specs(
     &PathBuf::from("./tests/specs"),
@@ -54,5 +54,5 @@ fn should_handle_windows_newlines() {
   let config = ConfigurationBuilder::new().build();
   let file_text = format_text(&PathBuf::from("file.toml"), "# 1\r\n# 2\r\n", &config).unwrap();
 
-  assert_eq!(file_text, "# 1\n# 2\n");
+  assert_eq!(file_text.unwrap(), "# 1\n# 2\n");
 }

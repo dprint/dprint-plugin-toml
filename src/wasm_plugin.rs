@@ -1,25 +1,23 @@
-use super::configuration::{resolve_config, Configuration};
+use super::configuration::resolve_config;
+use super::configuration::Configuration;
 
-use anyhow::Result;
-use dprint_core::configuration::{ConfigKeyMap, GlobalConfiguration, ResolveConfigurationResult};
+use dprint_core::configuration::ConfigKeyMap;
+use dprint_core::configuration::GlobalConfiguration;
+use dprint_core::configuration::ResolveConfigurationResult;
 use dprint_core::generate_plugin_code;
-use dprint_core::plugins::{PluginHandler, PluginInfo};
+use dprint_core::plugins::FormatResult;
+use dprint_core::plugins::PluginInfo;
+use dprint_core::plugins::SyncPluginHandler;
 use std::path::Path;
 
-struct TomlPluginHandler {}
+struct TomlPluginHandler;
 
-impl TomlPluginHandler {
-  pub const fn new() -> Self {
-    TomlPluginHandler {}
-  }
-}
-
-impl PluginHandler<Configuration> for TomlPluginHandler {
+impl SyncPluginHandler<Configuration> for TomlPluginHandler {
   fn resolve_config(&mut self, config: ConfigKeyMap, global_config: &GlobalConfiguration) -> ResolveConfigurationResult<Configuration> {
     resolve_config(config, global_config)
   }
 
-  fn get_plugin_info(&mut self) -> PluginInfo {
+  fn plugin_info(&mut self) -> PluginInfo {
     let version = env!("CARGO_PKG_VERSION").to_string();
     PluginInfo {
       name: env!("CARGO_PKG_NAME").to_string(),
@@ -33,27 +31,19 @@ impl PluginHandler<Configuration> for TomlPluginHandler {
     }
   }
 
-  fn get_license_text(&mut self) -> String {
+  fn license_text(&mut self) -> String {
     std::str::from_utf8(include_bytes!("../LICENSE")).unwrap().into()
   }
 
-  fn format_text(
+  fn format(
     &mut self,
     file_path: &Path,
     file_text: &str,
     config: &Configuration,
-    _format_with_host: impl FnMut(&Path, String, &ConfigKeyMap) -> Result<String>,
-  ) -> Result<String> {
+    _format_with_host: impl FnMut(&Path, String, &ConfigKeyMap) -> FormatResult,
+  ) -> FormatResult {
     super::format_text(file_path, file_text, config)
   }
 }
 
-// for clearing the configuration in the playground
-#[no_mangle]
-pub fn reset_config() {
-  unsafe {
-    RESOLVE_CONFIGURATION_RESULT.get().take();
-  }
-}
-
-generate_plugin_code!(TomlPluginHandler, TomlPluginHandler::new());
+generate_plugin_code!(TomlPluginHandler, TomlPluginHandler);
