@@ -1,4 +1,3 @@
 /target
-Cargo.lock
 deployment/npm/buffer.generated.js
 deployment/npm/node_modules
