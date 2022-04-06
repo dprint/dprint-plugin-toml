@@ -260,9 +260,6 @@ fn gen_surrounded_by_tokens<'a, 'b>(
 
   items.extend(gen_inner(context));
 
-  let before_trailing_comments_info = Info::new("beforeTrailingComments");
-  items.push_info(before_trailing_comments_info);
-
   let close_token: SyntaxElement = opts.close_token.into();
   for comment in close_token.get_comments_on_previous_lines() {
     if NodeOrToken::Token(comment.clone()).has_leading_blank_line() {
