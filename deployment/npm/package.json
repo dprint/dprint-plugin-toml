@@ -1,7 +1,7 @@
 {
   "name": "@dprint/toml",
   "version": "0.0.0",
-  "description": "Wasm buffer for dprint-plugin-toml.",
+  "description": "Wasm module for dprint-plugin-toml.",
   "main": "./index.js",
   "types": "./index.d.ts",
   "repository": {
