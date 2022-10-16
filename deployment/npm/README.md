@@ -2,7 +2,7 @@
 
 npm distribution of [dprint-plugin-toml](https://github.com/dprint/dprint-plugin-toml).
 
-Use this with [@dprint/formatter](https://github.com/dprint/js-formatter) or just use @dprint/formatter and download the [dprint-plugin-toml WASM file](https://github.com/dprint/dprint-plugin-toml/releases).
+Use this with [@dprint/formatter](https://github.com/dprint/js-formatter) or just use @dprint/formatter and download the [dprint-plugin-toml Wasm file](https://github.com/dprint/dprint-plugin-toml/releases).
 
 ## Example
 
