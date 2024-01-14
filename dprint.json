@@ -11,10 +11,10 @@
     "**/target"
   ],
   "plugins": [
-    "https://plugins.dprint.dev/typescript-0.75.0.wasm",
-    "https://plugins.dprint.dev/json-0.15.6.wasm",
-    "https://plugins.dprint.dev/markdown-0.14.1.wasm",
+    "https://plugins.dprint.dev/typescript-0.88.9.wasm",
+    "https://plugins.dprint.dev/json-0.19.1.wasm",
+    "https://plugins.dprint.dev/markdown-0.16.3.wasm",
     "https://plugins.dprint.dev/toml-0.5.4.wasm",
-    "https://plugins.dprint.dev/exec-0.4.2.json@ca3c3d1cc1105b4ac1c31afdb26791a90209f13a5950f8de00dcab5e5ee293a7"
+    "https://plugins.dprint.dev/exec-0.4.4.json@c207bf9b9a4ee1f0ecb75c594f774924baf62e8e53a2ce9d873816a408cecbf7"
   ]
 }
