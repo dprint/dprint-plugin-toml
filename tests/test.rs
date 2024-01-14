@@ -15,7 +15,7 @@ use dprint_plugin_toml::*;
 #[test]
 fn test_specs() {
   //debug_here!();
-  let global_config = resolve_global_config(ConfigKeyMap::new(), &Default::default()).config;
+  let global_config = GlobalConfiguration::default();
 
   run_specs(
     &PathBuf::from("./tests/specs"),
@@ -29,7 +29,8 @@ fn test_specs() {
     {
       let global_config = global_config.clone();
       move |file_path, file_text, spec_config| {
-        let config_result = resolve_config(parse_config_key_map(spec_config), &global_config);
+        let spec_config: ConfigKeyMap = serde_json::from_value(spec_config.clone().into()).unwrap();
+        let config_result = resolve_config(spec_config, &global_config);
         ensure_no_diagnostics(&config_result.diagnostics);
 
         format_text(file_path, &file_text, &config_result.config)
@@ -40,7 +41,7 @@ fn test_specs() {
       {
         let config_result = resolve_config(parse_config_key_map(_spec_config), &global_config);
         ensure_no_diagnostics(&config_result.diagnostics);
-        return serde_json::to_string(&trace_file(_file_path, _file_text, &config_result.config)).unwrap();
+        return serde_json::to_string(&trace_file(_file_name, _file_text, &config_result.config)).unwrap();
       }
 
       #[cfg(not(feature = "tracing"))]

@@ -19,7 +19,7 @@ impl SyncPluginHandler<Configuration> for TomlPluginHandler {
     resolve_config(config, global_config)
   }
 
-  fn plugin_info(&mut self) -> PluginInfo {
+  fn plugin_info(&mut self) -> SyncPluginInfo {
     let version = env!("CARGO_PKG_VERSION").to_string();
     SyncPluginInfo {
       info: PluginInfo {
