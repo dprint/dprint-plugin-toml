@@ -116,7 +116,7 @@ mod tests {
 
     let inner_config = config.get_inner_config();
     assert_eq!(inner_config.len(), 6);
-    let diagnostics = resolve_config(inner_config, &resolve_global_config(ConfigKeyMap::new(), &Default::default()).config).diagnostics;
+    let diagnostics = resolve_config(inner_config, &Default::default()).diagnostics;
     assert_eq!(diagnostics.len(), 0);
   }
 
@@ -126,7 +126,7 @@ mod tests {
     global_config.insert(String::from("lineWidth"), 90.into());
     global_config.insert(String::from("newLineKind"), "crlf".into());
     global_config.insert(String::from("useTabs"), true.into());
-    let global_config = resolve_global_config(global_config, &Default::default()).config;
+    let global_config = resolve_global_config(&mut global_config).config;
     let mut config_builder = ConfigurationBuilder::new();
     let config = config_builder.global_config(global_config).build();
     assert_eq!(config.line_width, 90);

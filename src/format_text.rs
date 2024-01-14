@@ -6,11 +6,10 @@ use anyhow::bail;
 use anyhow::Result;
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::formatting::PrintOptions;
-use dprint_core::plugins::FormatResult;
 use std::path::Path;
 use taplo::syntax::SyntaxNode;
 
-pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> FormatResult {
+pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<Option<String>> {
   let node = parse_and_process_node(file_path, text, config)?;
 
   let result = dprint_core::formatting::format(|| generate(node, text, config), config_to_print_options(text, config));

@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::path::Path;
-use taplo::{
-  rowan::NodeOrToken,
-  syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken},
-};
+use taplo::rowan::NodeOrToken;
+use taplo::syntax::SyntaxElement;
+use taplo::syntax::SyntaxKind;
+use taplo::syntax::SyntaxNode;
+use taplo::syntax::SyntaxToken;
 
 use crate::rowan_extensions::*;
 
