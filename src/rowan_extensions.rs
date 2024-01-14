@@ -1,7 +1,7 @@
-use taplo::{
-  rowan::NodeOrToken,
-  syntax::{SyntaxElement, SyntaxKind, SyntaxToken},
-};
+use taplo::rowan::NodeOrToken;
+use taplo::syntax::SyntaxElement;
+use taplo::syntax::SyntaxKind;
+use taplo::syntax::SyntaxToken;
 
 pub trait SyntaxElementExtensions {
   fn text(&self) -> String;

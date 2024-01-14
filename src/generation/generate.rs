@@ -1,4 +1,5 @@
 use dprint_core::formatting::conditions::*;
+use dprint_core::formatting::ir_helpers::SingleLineOptions;
 use dprint_core::formatting::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -327,9 +328,11 @@ fn gen_comma_separated_values<'a>(opts: ParseCommaSeparatedValuesOptions, contex
       prefer_hanging: opts.prefer_hanging,
       force_use_new_lines: opts.force_use_new_lines,
       allow_blank_lines: opts.allow_blank_lines,
-      single_line_space_at_start: opts.single_line_space_at_start,
-      single_line_space_at_end: opts.single_line_space_at_end,
-      single_line_separator: opts.custom_single_line_separator.unwrap_or(Signal::SpaceOrNewLine.into()),
+      single_line_options: SingleLineOptions {
+        space_at_start: opts.single_line_space_at_start,
+        space_at_end: opts.single_line_space_at_end,
+        separator: opts.custom_single_line_separator.unwrap_or(Signal::SpaceOrNewLine.into()),
+      },
       indent_width,
       multi_line_options: opts.multi_line_options,
       force_possible_newline_at_start: opts.force_possible_newline_at_start,
