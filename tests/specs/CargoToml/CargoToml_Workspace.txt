@@ -362,10 +362,6 @@ members = [
   "bench_util",
   "cli",
   "cli/napi/sym",
-  "runtime",
-  "test_ffi",
-  "test_napi",
-  "test_util",
   "ext/broadcast_channel",
   "ext/cache",
   "ext/canvas",
@@ -378,6 +374,7 @@ members = [
   "ext/http",
   "ext/io",
   "ext/kv",
+  "ext/napi",
   "ext/net",
   "ext/node",
   "ext/url",
@@ -386,7 +383,10 @@ members = [
   "ext/webidl",
   "ext/websocket",
   "ext/webstorage",
-  "ext/napi",
+  "runtime",
+  "test_ffi",
+  "test_napi",
+  "test_util",
 ]
 exclude = ["test_util/std/hash/_wasm"]
 
@@ -710,3 +710,23 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.base64-simd]
 opt-level = 3
+
+== should handle comments between workspace members ==
+[workspace]
+members = [
+  # members
+  "member2",
+  "member1",
+
+  "asdf"
+]
+
+[expect]
+[workspace]
+members = [
+  # members
+  "member1",
+  "member2",
+
+  "asdf",
+]

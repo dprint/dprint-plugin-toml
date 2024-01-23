@@ -19,28 +19,37 @@ pub fn apply_cargo_toml_conventions(node: SyntaxNode) -> SyntaxNode {
   let node = node.clone_for_update(); // use mutable API to make updates easier
   let mut children = node.children().peekable();
 
+  let mut last_header = None;
   while let Some(child) = children.next() {
-    eprintln!("CHILD: {:?} {}", child.kind(), child.text());
-    if child.kind() == SyntaxKind::TABLE_HEADER {
-      if child.text() == "[package]" || child.text() == "[workspace.package]" {
-        let section_children = get_section_children(&mut children);
-        sort_nodes(&node, section_children, &sort_cargo_package_section);
-      } else if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]" || child.text() == "[workspace.dependencies]" {
-        let section_children = get_section_children(&mut children);
-        sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
-      } else if child.text() == "[workspace]" {
-        for child in child.children() {
-          eprintln!("CHILD2: {:?}", child.kind());
-          if child.kind() == SyntaxKind::ENTRY {
-            eprintln!("KEY: {}", child.entry_key_text());
-            if child.entry_key_text() == "members" {
-              let section_children = get_section_children(&mut children);
-              sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
-              break;
+    match child.kind() {
+      SyntaxKind::TABLE_HEADER => {
+        last_header = Some(child.text());
+        if child.text() == "[package]" || child.text() == "[workspace.package]" {
+          let section_children = get_section_children(&mut children);
+          sort_nodes(&node, section_children, &sort_cargo_package_section);
+        } else if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]" || child.text() == "[workspace.dependencies]" {
+          let section_children = get_section_children(&mut children);
+          sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
+        }
+      }
+      SyntaxKind::ENTRY => {
+        if last_header.as_ref().map(|r| r == "[workspace]").unwrap_or(false) && child.entry_key_text() == "members" {
+          let value_array = child
+            .children()
+            .find(|child| child.kind() == SyntaxKind::VALUE)
+            .and_then(|value| value.children().find(|child| child.kind() == SyntaxKind::ARRAY));
+          if let Some(value) = value_array {
+            if value
+              .children()
+              .all(|c| c.kind() == SyntaxKind::VALUE && c.children().all(|c| c.kind() == SyntaxKind::STRING))
+            {
+              let section_children = value.children().collect();
+              sort_nodes(&value, section_children, &|left, right| left.text().to_string().cmp(&right.text().to_string()));
             }
           }
         }
       }
+      _ => {}
     }
   }
 
