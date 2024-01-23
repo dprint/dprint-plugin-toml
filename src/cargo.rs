@@ -25,7 +25,9 @@ pub fn apply_cargo_toml_conventions(node: SyntaxNode) -> SyntaxNode {
         let section_children = get_section_children(&mut children);
         sort_nodes(&node, section_children, &sort_cargo_package_section);
       }
-      if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]" {
+      if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]"
+      /*|| child.text() == "[workspace.dependencies]"*/
+      {
         let section_children = get_section_children(&mut children);
         sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
       }
