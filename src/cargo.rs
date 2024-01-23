@@ -20,16 +20,26 @@ pub fn apply_cargo_toml_conventions(node: SyntaxNode) -> SyntaxNode {
   let mut children = node.children().peekable();
 
   while let Some(child) = children.next() {
+    eprintln!("CHILD: {:?} {}", child.kind(), child.text());
     if child.kind() == SyntaxKind::TABLE_HEADER {
-      if child.text() == "[package]" {
+      if child.text() == "[package]" || child.text() == "[workspace.package]" {
         let section_children = get_section_children(&mut children);
         sort_nodes(&node, section_children, &sort_cargo_package_section);
-      }
-      if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]"
-      /*|| child.text() == "[workspace.dependencies]"*/
-      {
+      } else if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]" || child.text() == "[workspace.dependencies]" {
         let section_children = get_section_children(&mut children);
         sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
+      } else if child.text() == "[workspace]" {
+        for child in child.children() {
+          eprintln!("CHILD2: {:?}", child.kind());
+          if child.kind() == SyntaxKind::ENTRY {
+            eprintln!("KEY: {}", child.entry_key_text());
+            if child.entry_key_text() == "members" {
+              let section_children = get_section_children(&mut children);
+              sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
+              break;
+            }
+          }
+        }
       }
     }
   }
