@@ -1,4 +1,4 @@
-== should format multi-line strings (only) ==
+== should format multi-line strings ==
 strings = [
   """
   This is
