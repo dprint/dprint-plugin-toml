@@ -140,7 +140,7 @@ fn sort_children(children: Vec<NodeWithLeadingTrivia>, cmp: &impl Fn(&SyntaxNode
   child_groups.into_iter().flatten().collect()
 }
 
-fn sort_group(child_group: &mut Vec<NodeWithLeadingTrivia>, cmp: &impl Fn(&SyntaxNode, &SyntaxNode) -> Ordering) {
+fn sort_group(child_group: &mut [NodeWithLeadingTrivia], cmp: &impl Fn(&SyntaxNode, &SyntaxNode) -> Ordering) {
   // remove the first item's trivia to get the group trivia
   let group_trivia: Vec<_> = child_group.first_mut().unwrap().trivia.drain(..).collect();
   let previous_first_item_index = child_group.first().unwrap().node.index();

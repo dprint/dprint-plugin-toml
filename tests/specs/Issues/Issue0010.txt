@@ -1,0 +1,29 @@
+== should format multi-line strings ==
+strings = [
+  """
+  This is
+  a
+  multi-line
+  string
+  """,
+            '''This is
+    a multi-line literal string
+
+
+        ''',
+]
+
+[expect]
+strings = [
+  """
+  This is
+  a
+  multi-line
+  string
+  """,
+  '''This is
+    a multi-line literal string
+
+
+        ''',
+]
