@@ -18,7 +18,7 @@ name = "apple"
 color = "red"
 shape = "round"
 
-[[   fruits .  varieties  . "other"   ]]  # nested array of tables
+[[fruits .  varieties  . "other"   ]]  # nested array of tables
 name = "red delicious"
 
 [expect]
