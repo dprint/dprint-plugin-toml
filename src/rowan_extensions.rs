@@ -23,7 +23,7 @@ impl SyntaxElementExtensions for SyntaxElement {
 
   fn start_including_leading_comments(&self) -> usize {
     let result = self.get_comments_on_previous_lines();
-    if let Some(comment) = result.get(0) {
+    if let Some(comment) = result.first() {
       comment.text_range().start().into()
     } else {
       self.text_range().start().into()

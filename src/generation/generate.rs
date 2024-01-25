@@ -1,3 +1,5 @@
+#![allow(clippy::needless_lifetimes)]
+
 use dprint_core::formatting::conditions::*;
 use dprint_core::formatting::ir_helpers::SingleLineOptions;
 use dprint_core::formatting::*;
@@ -60,14 +62,20 @@ fn gen_node_with_inner<'a>(node: SyntaxElement, context: &mut Context<'a>, inner
     },
     NodeOrToken::Token(token) => match token.kind() {
       SyntaxKind::COMMENT => Ok(gen_comment(token, context)),
-      _ => Ok(ir_helpers::gen_from_string(token.text().trim().into())),
+      SyntaxKind::MULTI_LINE_STRING | SyntaxKind::MULTI_LINE_STRING_LITERAL => {
+        let mut items = PrintItems::new();
+        items.push_str("");
+        items.extend(ir_helpers::gen_from_raw_string(token.text().trim()));
+        Ok(items)
+      }
+      _ => Ok(ir_helpers::gen_from_string(token.text().trim())),
     },
   };
 
   items.extend(inner_parse(
     match result {
       Ok(items) => items,
-      Err(()) => ir_helpers::gen_from_raw_string_trim_line_ends(node.text().trim().into()),
+      Err(()) => ir_helpers::gen_from_raw_string_trim_line_ends(node.text().trim()),
     },
     context,
   ));
@@ -182,7 +190,7 @@ fn gen_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintIte
   // the comment seems to be stored as the last child of an inline table, so check for it here
   if let Some(NodeOrToken::Token(token)) = node.children_with_tokens().last() {
     if token.kind() == SyntaxKind::COMMENT {
-      items.extend(gen_comment(token.into(), context));
+      items.extend(gen_comment(token, context));
     }
   }
 
@@ -348,7 +356,7 @@ fn gen_comma_separated_value<'a>(value: SyntaxElement, generated_comma: PrintIte
   let generated_comma = generated_comma.into_rc_path();
   items.extend(gen_node_with_inner(value, context, move |mut items, _| {
     // this Rc clone is necessary because we can't move the captured generated_comma out of this closure
-    items.push_optional_path(generated_comma.clone());
+    items.push_optional_path(generated_comma);
     items
   }));
 
@@ -386,7 +394,7 @@ fn gen_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintItem
       let mut text = "#".repeat(info.leading_hashes_count);
       if !after_hash_text.is_empty() {
         if !info.has_leading_whitespace {
-          text.push_str(" ");
+          text.push(' ');
         }
         text.push_str(after_hash_text);
       }
@@ -405,10 +413,9 @@ struct CommentTextInfo {
 }
 
 fn get_comment_text_info(text: &str) -> CommentTextInfo {
-  let mut chars = text.chars();
   let mut leading_hashes_count = 0;
   let mut has_leading_whitespace = false;
-  while let Some(c) = chars.next() {
+  for c in text.chars() {
     match c {
       '#' => leading_hashes_count += 1,
       ' ' | '\t' => {

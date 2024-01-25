@@ -40,7 +40,7 @@ fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) 
 fn parse_taplo(text: &str) -> Result<SyntaxNode> {
   let parse_result = taplo::parser::parse(text);
 
-  if let Some(err) = parse_result.errors.get(0) {
+  if let Some(err) = parse_result.errors.first() {
     bail!(
       "{}",
       dprint_core::formatting::utils::string_utils::format_diagnostic(Some((err.range.start().into(), err.range.end().into())), &err.message, text,)
