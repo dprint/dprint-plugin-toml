@@ -3,6 +3,7 @@
 use dprint_core::formatting::conditions::*;
 use dprint_core::formatting::ir_helpers::SingleLineOptions;
 use dprint_core::formatting::*;
+use dprint_core_macros::sc;
 use std::cell::Cell;
 use std::rc::Rc;
 use taplo::rowan::NodeOrToken;
@@ -64,7 +65,7 @@ fn gen_node_with_inner<'a>(node: SyntaxElement, context: &mut Context<'a>, inner
       SyntaxKind::COMMENT => Ok(gen_comment(token, context)),
       SyntaxKind::MULTI_LINE_STRING | SyntaxKind::MULTI_LINE_STRING_LITERAL => {
         let mut items = PrintItems::new();
-        items.push_str("");
+        items.push_force_current_line_indentation();
         items.extend(ir_helpers::gen_from_raw_string(token.text().trim()));
         Ok(items)
       }
@@ -178,14 +179,14 @@ fn gen_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintIte
   ensure_all_kind(values.clone(), SyntaxKind::ENTRY)?;
 
   let mut items = PrintItems::new();
-  items.push_str("{");
+  items.push_sc(sc!("{"));
   let mut had_item = false;
   for (i, value) in values.enumerate() {
-    items.push_str(if i > 0 { ", " } else { " " });
+    items.push_sc(if i > 0 { sc!(", ") } else { sc!(" ") });
     items.extend(gen_node(value.into(), context));
     had_item = true;
   }
-  items.push_str(if had_item { " }" } else { "}" });
+  items.push_sc(if had_item { sc!(" }") } else { sc!("}") });
 
   // the comment seems to be stored as the last child of an inline table, so check for it here
   if let Some(NodeOrToken::Token(token)) = node.children_with_tokens().last() {
@@ -209,7 +210,7 @@ fn gen_entry<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResul
   let mut items = PrintItems::new();
 
   items.extend(gen_node(key.into(), context));
-  items.push_str(" = ");
+  items.push_sc(sc!(" = "));
   items.extend(gen_node(value.into(), context));
 
   Ok(items)
@@ -237,9 +238,9 @@ fn gen_table_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintIte
   // Spec: Naming rules for tables are the same as for keys
   let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
   let mut items = PrintItems::new();
-  items.push_str("[");
+  items.push_sc(sc!("["));
   items.extend(gen_node(key.into(), context));
-  items.push_str("]");
+  items.push_sc(sc!("]"));
   Ok(items)
 }
 
@@ -247,9 +248,9 @@ fn gen_table_array_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> Pr
   // Spec: Naming rules for tables are the same as for keys
   let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
   let mut items = PrintItems::new();
-  items.push_str("[[");
+  items.push_sc(sc!("[["));
   items.extend(gen_node(key.into(), context));
-  items.push_str("]]");
+  items.push_sc(sc!("]]"));
   Ok(items)
 }
 
