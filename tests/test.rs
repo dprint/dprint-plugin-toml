@@ -4,6 +4,7 @@ extern crate dprint_plugin_toml;
 //#[macro_use] extern crate debug_here;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 // use std::time::Instant;
 
 use dprint_core::configuration::*;
@@ -28,15 +29,15 @@ fn test_specs() {
     },
     {
       let global_config = global_config.clone();
-      move |file_path, file_text, spec_config| {
+      Arc::new(move |file_path, file_text, spec_config| {
         let spec_config: ConfigKeyMap = serde_json::from_value(spec_config.clone().into()).unwrap();
         let config_result = resolve_config(spec_config, &global_config);
         ensure_no_diagnostics(&config_result.diagnostics);
 
         format_text(file_path, &file_text, &config_result.config)
-      }
+      })
     },
-    move |_file_path, _file_text, _spec_config| {
+    Arc::new(move |_file_path, _file_text, _spec_config| {
       #[cfg(feature = "tracing")]
       {
         let config_result = resolve_config(parse_config_key_map(_spec_config), &global_config);
@@ -46,7 +47,7 @@ fn test_specs() {
 
       #[cfg(not(feature = "tracing"))]
       panic!("\n====\nPlease run with `cargo test --features tracing` to get trace output\n====\n")
-    },
+    }),
   )
 }
 

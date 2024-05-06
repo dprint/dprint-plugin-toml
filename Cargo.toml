@@ -26,7 +26,7 @@ tracing = ["dprint-core/tracing"]
 
 [dependencies]
 anyhow = "1.0.65"
-dprint-core = { version = "0.66.1", features = ["formatting"] }
+dprint-core = { version = "0.66.2", features = ["formatting"] }
 dprint-core-macros = "0.1.0"
 itertools = "0.10"
 serde = { version = "1.0.145", features = ["derive"] }
@@ -35,5 +35,5 @@ taplo = { version = "0.12.1", default_features = false }
 
 [dev-dependencies]
 debug-here = "0.2"
-dprint-development = "0.9.5"
+dprint-development = "0.10.1"
 serde_json = { version = "1.0" }
