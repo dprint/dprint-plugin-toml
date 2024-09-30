@@ -149,7 +149,7 @@ fn gen_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResul
   let open_token = get_token_with_kind(&node, SyntaxKind::BRACKET_START)?;
   let close_token = get_token_with_kind(&node, SyntaxKind::BRACKET_END)?;
   let is_in_inline_table = node.ancestors().any(|a| a.kind() == SyntaxKind::INLINE_TABLE);
-  let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone()) && node.children_with_tokens().skip(3).next().is_some();
+  let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone()) && node.children_with_tokens().nth(3).is_some();
   ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
 
   Ok(gen_surrounded_by_tokens(
