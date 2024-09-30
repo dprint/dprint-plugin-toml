@@ -35,7 +35,7 @@ fn gen_node<'a>(node: SyntaxElement, context: &mut Context<'a>) -> PrintItems {
 
 fn gen_node_with_inner<'a>(node: SyntaxElement, context: &mut Context<'a>, inner_parse: impl FnOnce(PrintItems, &mut Context<'a>) -> PrintItems) -> PrintItems {
   let mut items = PrintItems::new();
-  // println!("{:?}", node);
+  // eprintln!("{:?}", node);
 
   if node.kind() != SyntaxKind::COMMENT {
     for comment in node.get_comments_on_previous_lines() {
@@ -146,17 +146,24 @@ fn allow_blank_line(previous_kind: Option<SyntaxKind>, current_kind: SyntaxKind)
 
 fn gen_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
   let values = node.children();
-  let open_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_START)?;
-  let close_token = get_token_with_kind(node.clone(), SyntaxKind::BRACKET_END)?;
+  let open_token = get_token_with_kind(&node, SyntaxKind::BRACKET_START)?;
+  let close_token = get_token_with_kind(&node, SyntaxKind::BRACKET_END)?;
   let is_in_inline_table = node.ancestors().any(|a| a.kind() == SyntaxKind::INLINE_TABLE);
-  let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone());
+  let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone()) && node.children_with_tokens().nth(3).is_some();
   ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
 
   Ok(gen_surrounded_by_tokens(
     |context| {
+      let nodes = values.into_iter().map(|v| v.into()).collect::<Vec<_>>();
+      if nodes.is_empty() {
+        if force_use_new_lines {
+          return Signal::NewLine.into();
+        }
+        return PrintItems::new();
+      }
       gen_comma_separated_values(
         ParseCommaSeparatedValuesOptions {
-          nodes: values.into_iter().map(|v| v.into()).collect::<Vec<_>>(),
+          nodes,
           prefer_hanging: false,
           force_use_new_lines,
           allow_blank_lines: true,
@@ -205,8 +212,8 @@ fn gen_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintIte
 }
 
 fn gen_entry<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
-  let value = get_child_with_kind(node.clone(), SyntaxKind::VALUE)?;
+  let key = get_child_with_kind(&node, SyntaxKind::KEY)?;
+  let value = get_child_with_kind(&node, SyntaxKind::VALUE)?;
   let mut items = PrintItems::new();
 
   items.extend(gen_node(key.into(), context));
@@ -236,7 +243,7 @@ fn gen_children_inline<'a>(node: SyntaxNode, context: &mut Context<'a>) -> Print
 
 fn gen_table_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
   // Spec: Naming rules for tables are the same as for keys
-  let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
+  let key = get_child_with_kind(&node, SyntaxKind::KEY)?;
   let mut items = PrintItems::new();
   items.push_sc(sc!("["));
   items.extend(gen_node(key.into(), context));
@@ -246,7 +253,7 @@ fn gen_table_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintIte
 
 fn gen_table_array_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
   // Spec: Naming rules for tables are the same as for keys
-  let key = get_child_with_kind(node.clone(), SyntaxKind::KEY)?;
+  let key = get_child_with_kind(&node, SyntaxKind::KEY)?;
   let mut items = PrintItems::new();
   items.push_sc(sc!("[["));
   items.extend(gen_node(key.into(), context));
@@ -264,7 +271,6 @@ fn gen_surrounded_by_tokens<'a, 'b>(
   opts: ParseSurroundedByTokensParams,
   context: &mut Context<'a>,
 ) -> PrintItems {
-  // parse
   let mut items = PrintItems::new();
   items.extend(gen_node(opts.open_token.clone().into(), context));
 
@@ -533,14 +539,14 @@ fn get_children_with_non_trivia_tokens(node: SyntaxNode) -> impl Iterator<Item =
   })
 }
 
-fn get_child_with_kind(node: SyntaxNode, kind: SyntaxKind) -> Result<SyntaxNode, ()> {
+fn get_child_with_kind(node: &SyntaxNode, kind: SyntaxKind) -> Result<SyntaxNode, ()> {
   match node.children().find(|c| c.kind() == kind) {
     Some(node) => Ok(node),
     None => Err(()),
   }
 }
 
-fn get_token_with_kind(node: SyntaxNode, kind: SyntaxKind) -> Result<SyntaxToken, ()> {
+fn get_token_with_kind(node: &SyntaxNode, kind: SyntaxKind) -> Result<SyntaxToken, ()> {
   match node.children_with_tokens().find(|c| c.kind() == kind) {
     Some(NodeOrToken::Token(token)) => Ok(token),
     _ => Err(()),
