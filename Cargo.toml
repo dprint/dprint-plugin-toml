@@ -24,6 +24,11 @@ panic = "abort"
 wasm = ["serde_json", "dprint-core/wasm"]
 tracing = ["dprint-core/tracing"]
 
+[[test]]
+name = "specs"
+path = "tests/spec_test.rs"
+harness = false
+
 [dependencies]
 anyhow = "1.0.65"
 dprint-core = { version = "0.66.2", features = ["formatting"] }

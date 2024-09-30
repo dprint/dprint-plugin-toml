@@ -1,0 +1,78 @@
+== should not add blank line at start of array with only comments ==
+disallowed-types = [
+  # some comment
+  # { path = "std::sync::Arc", reason = "use crate::sync::MaybeArc instead" },
+
+  # next comment
+]
+
+[expect]
+disallowed-types = [
+  # some comment
+  # { path = "std::sync::Arc", reason = "use crate::sync::MaybeArc instead" },
+
+  # next comment
+]
+
+== should format with nodes ==
+disallowed-types = [
+  # some comment
+  # { path = "std::sync::Arc", reason = "use crate::sync::MaybeArc instead" },
+
+  # next comment
+  "test"
+]
+
+[expect]
+disallowed-types = [
+  # some comment
+  # { path = "std::sync::Arc", reason = "use crate::sync::MaybeArc instead" },
+
+  # next comment
+  "test",
+]
+
+== comment first line ==
+disallowed-types = [ # comment
+  "test",
+]
+
+[expect]
+disallowed-types = [ # comment
+  "test",
+]
+
+== comment first line no elements ==
+disallowed-types = [ # comment
+]
+
+[expect]
+disallowed-types = [ # comment
+]
+
+== empty ==
+value = [
+]
+
+[expect]
+value = []
+
+== one element ==
+value = [
+  "value"
+]
+
+[expect]
+value = [
+  "value",
+]
+
+== one comment ==
+value = [
+  # comment
+]
+
+[expect]
+value = [
+  # comment
+]
