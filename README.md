@@ -4,4 +4,6 @@
 
 [TOML](https://toml.io/) formatting plugin for [dprint](https://github.com/dprint/dprint).
 
+- [Configuration](https://dprint.dev/plugins/toml/config/)
+
 This uses [Taplo](https://taplo.tamasfe.dev/)'s TOML parser.
