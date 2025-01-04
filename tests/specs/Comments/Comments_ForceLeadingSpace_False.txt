@@ -20,3 +20,13 @@
 
 [expect]
 #	test
+
+== should not force when is #! ==
+#! Test
+#!Test
+#!## Test
+
+[expect]
+#! Test
+#!Test
+#!## Test
