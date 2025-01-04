@@ -397,8 +397,11 @@ fn gen_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintItem
   items.extend({
     if context.config.comment_force_leading_space {
       let info = get_comment_text_info(comment.text());
-      let after_hash_text = &comment.text()[info.leading_hashes_count..].trim_end();
+      let after_hash_text = &comment.text()[info.start_text_index..].trim_end();
       let mut text = "#".repeat(info.leading_hashes_count);
+      if info.has_exclamation_point {
+        text.push('!');
+      }
       if !after_hash_text.is_empty() {
         if !info.has_leading_whitespace {
           text.push(' ');
@@ -416,15 +419,31 @@ fn gen_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintItem
 
 struct CommentTextInfo {
   pub has_leading_whitespace: bool,
+  pub has_exclamation_point: bool,
   pub leading_hashes_count: usize,
+  pub start_text_index: usize,
 }
 
 fn get_comment_text_info(text: &str) -> CommentTextInfo {
   let mut leading_hashes_count = 0;
   let mut has_leading_whitespace = false;
-  for c in text.chars() {
+  let mut has_exclamation_point = false;
+  let mut start_text_index = 0;
+  let mut chars = text.char_indices();
+  for (index, c) in chars.by_ref() {
     match c {
-      '#' => leading_hashes_count += 1,
+      '#' if !has_exclamation_point => {
+        leading_hashes_count += 1;
+        start_text_index = index + 1;
+      }
+      '!' if leading_hashes_count == 1 => {
+        has_exclamation_point = true;
+        start_text_index = index + 1;
+        if matches!(chars.next(), Some((_, ' ' | '\t'))) {
+          has_leading_whitespace = true;
+        }
+        break;
+      }
       ' ' | '\t' => {
         has_leading_whitespace = true;
         break;
@@ -434,7 +453,9 @@ fn get_comment_text_info(text: &str) -> CommentTextInfo {
   }
   CommentTextInfo {
     leading_hashes_count,
+    has_exclamation_point,
     has_leading_whitespace,
+    start_text_index,
   }
 }
 
