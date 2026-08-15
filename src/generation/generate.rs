@@ -148,9 +148,27 @@ fn gen_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResul
   let values = node.children();
   let open_token = get_token_with_kind(&node, SyntaxKind::BRACKET_START)?;
   let close_token = get_token_with_kind(&node, SyntaxKind::BRACKET_END)?;
-  let is_in_inline_table = node.ancestors().any(|a| a.kind() == SyntaxKind::INLINE_TABLE);
+  let inline_table_ancestor = node.ancestors().find(|a| a.kind() == SyntaxKind::INLINE_TABLE);
+  let is_in_inline_table = inline_table_ancestor.is_some();
   let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone()) && node.children_with_tokens().nth(3).is_some();
   ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
+
+  if inline_table_ancestor.as_ref().is_some_and(requires_verbatim_newlines) {
+    // The enclosing inline table had to give up its force-no-new-lines scope to keep a multi-line
+    // string intact, so nothing is holding this array to one line any more. Separate the values with
+    // hard spaces instead: an inline table has to stay on one line, and unlike the scope this leaves
+    // the string's own newlines alone.
+    let mut items = PrintItems::new();
+    items.push_sc(sc!("["));
+    for (i, value) in values.enumerate() {
+      if i > 0 {
+        items.push_sc(sc!(", "));
+      }
+      items.extend(gen_node(value.into(), context));
+    }
+    items.push_sc(sc!("]"));
+    return Ok(items);
+  }
 
   Ok(gen_surrounded_by_tokens(
     |context| {
@@ -208,7 +226,34 @@ fn gen_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintIte
   // > curly braces unless they are valid within a value. Even so, it is strongly discouraged to break an inline
   // > table onto multiples lines. If you find yourself gripped with this desire, it means you should be using
   // > standard tables.
-  Ok(ir_helpers::with_no_new_lines(items))
+  //
+  // Note the "unless they are valid within a value" carve out, which is what `requires_verbatim_newlines`
+  // detects. Everything within an inline table is separated by hard spaces, so the scope is not what
+  // holds it to one line and dropping it here doesn't let anything wrap.
+  Ok(if requires_verbatim_newlines(&node) {
+    items
+  } else {
+    ir_helpers::with_no_new_lines(items)
+  })
+}
+
+/// Whether the newlines within `node` have to be emitted verbatim, which a force-no-new-lines scope
+/// cannot do: the printer discards every newline signal inside such a scope, and the newlines of a
+/// multi-line string are part of that string's value rather than formatting.
+///
+/// A node containing a comment stays on the scope-based path. A comment already forces a newline of
+/// its own, so the scope isn't what keeps such a node on one line, and the paths that skip the scope
+/// don't generate comments.
+fn requires_verbatim_newlines(node: &SyntaxNode) -> bool {
+  let mut found_multi_line_string = false;
+  for element in node.descendants_with_tokens() {
+    match element.kind() {
+      SyntaxKind::MULTI_LINE_STRING | SyntaxKind::MULTI_LINE_STRING_LITERAL => found_multi_line_string = true,
+      SyntaxKind::COMMENT => return false,
+      _ => {}
+    }
+  }
+  found_multi_line_string
 }
 
 fn gen_entry<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
