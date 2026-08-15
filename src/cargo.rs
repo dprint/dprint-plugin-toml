@@ -32,20 +32,18 @@ pub fn apply_cargo_toml_conventions(node: SyntaxNode) -> SyntaxNode {
           sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
         }
       }
-      SyntaxKind::ENTRY => {
-        if last_header.as_ref().map(|r| r == "[workspace]").unwrap_or(false) && child.entry_key_text() == "members" {
-          let value_array = child
+      SyntaxKind::ENTRY if last_header.as_ref().map(|r| r == "[workspace]").unwrap_or(false) && child.entry_key_text() == "members" => {
+        let value_array = child
+          .children()
+          .find(|child| child.kind() == SyntaxKind::VALUE)
+          .and_then(|value| value.children().find(|child| child.kind() == SyntaxKind::ARRAY));
+        if let Some(value) = value_array {
+          if value
             .children()
-            .find(|child| child.kind() == SyntaxKind::VALUE)
-            .and_then(|value| value.children().find(|child| child.kind() == SyntaxKind::ARRAY));
-          if let Some(value) = value_array {
-            if value
-              .children()
-              .all(|c| c.kind() == SyntaxKind::VALUE && c.children().all(|c| c.kind() == SyntaxKind::STRING))
-            {
-              let section_children = value.children().collect();
-              sort_nodes(&value, section_children, &|left, right| left.text().to_string().cmp(&right.text().to_string()));
-            }
+            .all(|c| c.kind() == SyntaxKind::VALUE && c.children().all(|c| c.kind() == SyntaxKind::STRING))
+          {
+            let section_children = value.children().collect();
+            sort_nodes(&value, section_children, &|left, right| left.text().to_string().cmp(&right.text().to_string()));
           }
         }
       }

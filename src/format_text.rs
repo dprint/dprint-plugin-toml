@@ -2,14 +2,15 @@ use super::configuration::Configuration;
 use super::generation::generate;
 use crate::cargo;
 
-use anyhow::bail;
-use anyhow::Result;
+use crate::error::FormatError;
+use crate::error::ParseError;
+
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::formatting::PrintOptions;
 use std::path::Path;
 use taplo::syntax::SyntaxNode;
 
-pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<Option<String>> {
+pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<Option<String>, FormatError> {
   let result = format_text_inner(file_path, text, config)?;
   if result == text {
     Ok(None)
@@ -18,7 +19,7 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
   }
 }
 
-fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String> {
+fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
   let text = strip_bom(text);
   let node = parse_and_process_node(file_path, text, config)?;
 
@@ -39,7 +40,7 @@ fn strip_bom(text: &str) -> &str {
   text.strip_prefix("\u{FEFF}").unwrap_or(text)
 }
 
-fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<SyntaxNode> {
+fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<SyntaxNode, FormatError> {
   let node = parse_taplo(text)?;
 
   Ok(if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
@@ -49,14 +50,15 @@ fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) 
   })
 }
 
-fn parse_taplo(text: &str) -> Result<SyntaxNode> {
+fn parse_taplo(text: &str) -> Result<SyntaxNode, ParseError> {
   let parse_result = taplo::parser::parse(text);
 
   if let Some(err) = parse_result.errors.first() {
-    bail!(
-      "{}",
-      dprint_core::formatting::utils::string_utils::format_diagnostic(Some((err.range.start().into(), err.range.end().into())), &err.message, text,)
-    )
+    Err(ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
+      Some((err.range.start().into(), err.range.end().into())),
+      &err.message,
+      text,
+    )))
   } else {
     Ok(parse_result.into_syntax())
   }

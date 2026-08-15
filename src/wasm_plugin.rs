@@ -7,6 +7,7 @@ use dprint_core::generate_plugin_code;
 use dprint_core::plugins::CheckConfigUpdatesMessage;
 use dprint_core::plugins::ConfigChange;
 use dprint_core::plugins::FileMatchingInfo;
+use dprint_core::plugins::FormatError;
 use dprint_core::plugins::FormatResult;
 use dprint_core::plugins::PluginInfo;
 use dprint_core::plugins::PluginResolveConfigurationResult;
@@ -29,7 +30,7 @@ impl SyncPluginHandler<Configuration> for TomlPluginHandler {
     }
   }
 
-  fn check_config_updates(&self, _message: CheckConfigUpdatesMessage) -> Result<Vec<ConfigChange>, anyhow::Error> {
+  fn check_config_updates(&self, _message: CheckConfigUpdatesMessage) -> Result<Vec<ConfigChange>, FormatError> {
     Ok(Vec::new())
   }
 
@@ -51,7 +52,8 @@ impl SyncPluginHandler<Configuration> for TomlPluginHandler {
 
   fn format(&mut self, request: SyncFormatRequest<Configuration>, _format_with_host: impl FnMut(SyncHostFormatRequest) -> FormatResult) -> FormatResult {
     let file_text = String::from_utf8(request.file_bytes)?;
-    super::format_text(request.file_path, &file_text, request.config).map(|maybe_file_text| maybe_file_text.map(|text| text.into_bytes()))
+    let result = super::format_text(request.file_path, &file_text, request.config).map_err(FormatError::new)?;
+    Ok(result.map(|file_text| file_text.into_bytes()))
   }
 }
 
