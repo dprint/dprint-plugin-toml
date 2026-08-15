@@ -128,7 +128,7 @@ mod tests {
     let mut config_builder = ConfigurationBuilder::new();
     let config = config_builder.global_config(global_config).build();
     assert_eq!(config.line_width, 90);
-    assert_eq!(config.new_line_kind == NewLineKind::CarriageReturnLineFeed, true);
+    assert!(config.new_line_kind == NewLineKind::CarriageReturnLineFeed);
   }
 
   #[test]
@@ -137,6 +137,6 @@ mod tests {
     let mut config_builder = ConfigurationBuilder::new();
     let config = config_builder.global_config(global_config).build();
     assert_eq!(config.indent_width, 2); // this is different
-    assert_eq!(config.new_line_kind == NewLineKind::LineFeed, true);
+    assert!(config.new_line_kind == NewLineKind::LineFeed);
   }
 }

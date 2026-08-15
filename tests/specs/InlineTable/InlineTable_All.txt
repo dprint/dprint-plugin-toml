@@ -22,3 +22,29 @@ other = { version = "0.1.0", features = [
 [expect]
 name = { version = "0.1.0", features = ["feature1", "feature2", "feature3"] }
 other = { version = "0.1.0", features = ["feature1", "feature2", "feature3"] }
+
+== should preserve newlines within a multi-line string in an inline table ==
+a = { b = """
+multi
+line""" }
+c = { d = '''
+literal
+lines''', e = 1 }
+
+[expect]
+a = { b = """
+multi
+line""" }
+c = { d = '''
+literal
+lines''', e = 1 }
+
+== should not break up an array in an inline table that has a multi-line string ==
+a = { s = """
+multi
+line""", f = ["feature1", "feature2", "feature3", "feature4"] }
+
+[expect]
+a = { s = """
+multi
+line""", f = ["feature1", "feature2", "feature3", "feature4"] }
