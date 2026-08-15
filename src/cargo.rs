@@ -1,13 +1,7 @@
 use std::cmp::Ordering;
-use std::iter::Peekable;
 use std::path::Path;
-use taplo::rowan::NodeOrToken;
-use taplo::syntax::SyntaxElement;
-use taplo::syntax::SyntaxKind;
-use taplo::syntax::SyntaxNode;
-use taplo::syntax::SyntaxToken;
 
-use crate::rowan_extensions::*;
+use crate::ast::*;
 
 pub fn is_cargo_toml_file(file_path: &Path) -> bool {
   // don't need to worry about different casing because Cargo.toml will
@@ -15,47 +9,57 @@ pub fn is_cargo_toml_file(file_path: &Path) -> bool {
   file_path.file_name().map(|n| n == "Cargo.toml").unwrap_or(false)
 }
 
-pub fn apply_cargo_toml_conventions(node: SyntaxNode) -> SyntaxNode {
-  let node = node.clone_for_update(); // use mutable API to make updates easier
-  let mut children = node.children().peekable();
+pub fn apply_cargo_toml_conventions(root: &mut Root) {
+  let mut index = 0;
+  let mut last_header: Option<String> = None;
 
-  let mut last_header = None;
-  while let Some(child) = children.next() {
-    match child.kind() {
-      SyntaxKind::TABLE_HEADER => {
-        last_header = Some(child.text());
-        if child.text() == "[package]" || child.text() == "[workspace.package]" {
-          let section_children = get_section_children(&mut children);
-          sort_nodes(&node, section_children, &sort_cargo_package_section);
-        } else if child.text() == "[dependencies]" || child.text() == "[dev-dependencies]" || child.text() == "[workspace.dependencies]" {
-          let section_children = get_section_children(&mut children);
-          sort_nodes(&node, section_children, &|left, right| left.entry_key_text().cmp(&right.entry_key_text()));
+  while index < root.items.len() {
+    match &root.items[index] {
+      RootItem::TableHeader(header) => {
+        let name = if header.is_array_of_tables { String::new() } else { header.key.text() };
+        let end = section_end(&root.items, index + 1);
+        match name.as_str() {
+          "package" | "workspace.package" => sort_section(&mut root.items, index + 1, end, &sort_cargo_package_section),
+          "dependencies" | "dev-dependencies" | "workspace.dependencies" => {
+            sort_section(&mut root.items, index + 1, end, &|left, right| entry_sort_key(left).cmp(entry_sort_key(right)))
+          }
+          _ => {}
         }
+        last_header = Some(name);
+        // sorting a section doesn't change how many items it has, so the walk just continues
+        index += 1;
       }
-      SyntaxKind::ENTRY if last_header.as_ref().map(|r| r == "[workspace]").unwrap_or(false) && child.entry_key_text() == "members" => {
-        let value_array = child
-          .children()
-          .find(|child| child.kind() == SyntaxKind::VALUE)
-          .and_then(|value| value.children().find(|child| child.kind() == SyntaxKind::ARRAY));
-        if let Some(value) = value_array {
-          if value
-            .children()
-            .all(|c| c.kind() == SyntaxKind::VALUE && c.children().all(|c| c.kind() == SyntaxKind::STRING))
-          {
-            let section_children = value.children().collect();
-            sort_nodes(&value, section_children, &|left, right| left.text().to_string().cmp(&right.text().to_string()));
+      RootItem::Entry(entry) => {
+        if last_header.as_deref() == Some("workspace") && entry_sort_key(entry) == "members" {
+          if let RootItem::Entry(entry) = &mut root.items[index] {
+            sort_workspace_members(entry);
           }
         }
+        index += 1;
       }
-      _ => {}
+      RootItem::Comment(_) => index += 1,
     }
   }
-
-  node
 }
 
-fn sort_cargo_package_section(left: &SyntaxNode, right: &SyntaxNode) -> Ordering {
-  match (left.entry_key_text().as_str(), right.entry_key_text().as_str()) {
+/// The index just past the last item belonging to the section starting at `start`, which runs until
+/// the next table header.
+fn section_end(items: &[RootItem], start: usize) -> usize {
+  items[start..]
+    .iter()
+    .position(RootItem::is_table_header)
+    .map(|i| start + i)
+    .unwrap_or(items.len())
+}
+
+/// The name an entry sorts under. Only the first segment of a dotted key is used, so that
+/// `serde.workspace` sorts beside `serde`.
+fn entry_sort_key(entry: &Entry) -> &str {
+  entry.key.parts.first().map(|p| p.text.as_str()).unwrap_or("")
+}
+
+fn sort_cargo_package_section(left: &Entry, right: &Entry) -> Ordering {
+  match (entry_sort_key(left), entry_sort_key(right)) {
     ("version", "name") => Ordering::Greater,
     ("name", _) => Ordering::Less,
     ("version", _) => Ordering::Less,
@@ -68,161 +72,137 @@ fn sort_cargo_package_section(left: &SyntaxNode, right: &SyntaxNode) -> Ordering
   }
 }
 
-fn get_section_children(children: &mut Peekable<impl Iterator<Item = SyntaxNode>>) -> Vec<SyntaxNode> {
-  let mut nodes = vec![];
-
-  while let Some(entry) = children.next_if(|child| child.kind() == SyntaxKind::ENTRY) {
-    nodes.push(entry);
-  }
-
-  nodes
-}
-
-fn sort_nodes(parent: &SyntaxNode, children: Vec<SyntaxNode>, cmp: &impl Fn(&SyntaxNode, &SyntaxNode) -> Ordering) {
-  if children.is_empty() {
-    return; // nothing to do
-  }
-
-  let children: Vec<_> = children.into_iter().map(NodeWithLeadingTrivia::from).collect();
-  let start = children.first().unwrap().start_index();
-  let end = children.last().unwrap().end_index();
-  let children = sort_children(children, cmp);
-
-  let mut nodes_and_comments: Vec<SyntaxElement> = Vec::new();
-
-  for node in children.into_iter() {
-    nodes_and_comments.extend(node.trivia.into_iter().map(|c| c.into()));
-    nodes_and_comments.push(node.node.into());
-  }
-
-  parent.splice_children(start..end, nodes_and_comments)
-}
-
-struct NodeWithLeadingTrivia {
-  node: SyntaxNode,
-  trivia: Vec<SyntaxToken>,
-}
-
-impl NodeWithLeadingTrivia {
-  pub fn from(node: SyntaxNode) -> Self {
-    let trivia = node.get_previous_trivia();
-    NodeWithLeadingTrivia { node, trivia }
-  }
-
-  pub fn start_index(&self) -> usize {
-    self.trivia.first().map(|t| t.index()).unwrap_or_else(|| self.node.index())
-  }
-
-  pub fn end_index(&self) -> usize {
-    self.node.index() + 1
-  }
-}
-
-fn sort_children(children: Vec<NodeWithLeadingTrivia>, cmp: &impl Fn(&SyntaxNode, &SyntaxNode) -> Ordering) -> Vec<NodeWithLeadingTrivia> {
-  // Break up the children into groups based on if they have a preceeding blank line.
-  // This allows people to explicitly define "groups" via blank lines within the children.
-  let mut child_groups: Vec<Vec<NodeWithLeadingTrivia>> = Vec::new();
-  for child in children.into_iter() {
-    if child_groups.is_empty() || child.node.has_previous_blank_line() {
-      let child_group = Vec::new();
-      child_groups.push(child_group);
-    }
-    child_groups.last_mut().unwrap().push(child);
-  }
-
-  // sort each group
-  for child_group in child_groups.iter_mut() {
-    sort_group(child_group, cmp);
-  }
-
-  child_groups.into_iter().flatten().collect()
-}
-
-fn sort_group(child_group: &mut [NodeWithLeadingTrivia], cmp: &impl Fn(&SyntaxNode, &SyntaxNode) -> Ordering) {
-  // remove the first item's trivia to get the group trivia
-  let group_trivia: Vec<_> = child_group.first_mut().unwrap().trivia.drain(..).collect();
-  let previous_first_item_index = child_group.first().unwrap().node.index();
-
-  // sort the items
-  child_group.sort_by(|left, right| cmp(&left.node, &right.node));
-
-  // now insert the group trivia to the new first item and
-  // take the new first item and make its non-comment leading
-  // trivia the previous first item's trivia
-  let first_item_trivia_to_move = {
-    let first_item = child_group.first_mut().unwrap();
-    let trivia_remove_end = first_item
-      .trivia
-      .iter()
-      .position(|t| t.kind() == SyntaxKind::COMMENT)
-      .unwrap_or(first_item.trivia.len());
-    let trivia = first_item.trivia.drain(..trivia_remove_end).collect::<Vec<_>>();
-    first_item.trivia.splice(0..0, group_trivia);
-    trivia
+/// Sorts the string members of a `[workspace]` `members` array.
+fn sort_workspace_members(entry: &mut Entry) {
+  let ValueKind::Array(array) = &mut entry.value.kind else {
+    return;
   };
-  let previous_first_item = child_group.iter_mut().find(|t| t.node.index() == previous_first_item_index).unwrap();
-  previous_first_item.trivia.extend(first_item_trivia_to_move);
+  let all_strings = array.values.iter().all(|value| match &value.value.kind {
+    ValueKind::Scalar(text) => text.starts_with('"') || text.starts_with('\''),
+    _ => false,
+  });
+  if !all_strings {
+    return;
+  }
+  let mut units = array
+    .values
+    .drain(..)
+    .map(|mut value| Unit {
+      leading_blank: value.leading_comments.first().map(|c| c.blank_line_before).unwrap_or(value.blank_line_before),
+      starts_group: value.blank_line_before || value.leading_comments.iter().any(|c| c.blank_line_before),
+      leading_comments: std::mem::take(&mut value.leading_comments),
+      value,
+    })
+    .collect::<Vec<_>>();
+  sort_units(&mut units, |left, right| scalar_text(&left.value).cmp(scalar_text(&right.value)));
+  array.values = units
+    .into_iter()
+    .map(|mut unit| {
+      match unit.leading_comments.first_mut() {
+        Some(first) => first.blank_line_before = unit.leading_blank,
+        None => unit.value.blank_line_before = unit.leading_blank,
+      }
+      ArrayValue {
+        leading_comments: unit.leading_comments,
+        ..unit.value
+      }
+    })
+    .collect();
 }
 
-trait SyntaxNodeExt {
-  fn entry_key_text(&self) -> String;
-  fn has_previous_blank_line(&self) -> bool;
-  fn get_previous_trivia(&self) -> Vec<SyntaxToken>;
+fn scalar_text(value: &Value) -> &str {
+  match &value.kind {
+    ValueKind::Scalar(text) | ValueKind::MultiLineString(text) => text,
+    _ => "",
+  }
 }
 
-impl SyntaxNodeExt for SyntaxNode {
-  fn entry_key_text(&self) -> String {
-    let key = self.children().find(|child| child.kind() == SyntaxKind::KEY).expect("ENTRY should contain KEY");
+/// One sortable thing along with the comments written above it.
+struct Unit<T> {
+  leading_comments: Vec<Comment>,
+  /// Whether a blank line is rendered above this unit's first element.
+  leading_blank: bool,
+  /// Whether a blank line appears anywhere between the previous item and this one, which the
+  /// author uses to divide a section into groups. It may sit either above this unit's comments or
+  /// between them and the item itself, and only the former is `leading_blank`.
+  starts_group: bool,
+  value: T,
+}
 
-    let ident = key
-      .children_with_tokens()
-      .find_map(|child| match child {
-        SyntaxElement::Token(token) if token.kind() == SyntaxKind::IDENT => Some(token),
-        _ => None,
-      })
-      .expect("KEY should contain IDENT");
-
-    ident.to_string()
+/// Sorts the entries of `items[start..end]`, keeping each entry's own comments with it.
+fn sort_section(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl Fn(&Entry, &Entry) -> Ordering) {
+  // Split the section into one unit per entry, each carrying the comments written above it. Any
+  // comments after the final entry belong to no entry and stay where they are.
+  let mut units: Vec<Unit<Entry>> = Vec::new();
+  let mut pending: Vec<Comment> = Vec::new();
+  let mut trailing: Vec<Comment> = Vec::new();
+  for item in items.drain(start..end) {
+    match item {
+      RootItem::Comment(comment) => pending.push(comment),
+      RootItem::Entry(entry) => units.push(Unit {
+        leading_blank: pending.first().map(|c| c.blank_line_before).unwrap_or(entry.blank_line_before),
+        starts_group: entry.blank_line_before || pending.iter().any(|c| c.blank_line_before),
+        leading_comments: std::mem::take(&mut pending),
+        value: entry,
+      }),
+      // a section runs up to the next header, so nothing else can appear in it
+      RootItem::TableHeader(_) => unreachable!(),
+    }
   }
+  trailing.append(&mut pending);
 
-  fn has_previous_blank_line(&self) -> bool {
-    let mut element: SyntaxElement = self.clone().into();
-    let mut last_was_newline = false;
-    while let Some(sibling) = element.prev_sibling_or_token() {
-      element = sibling.clone();
-      match sibling {
-        NodeOrToken::Token(token) => match token.kind() {
-          SyntaxKind::COMMENT => last_was_newline = false,
-          SyntaxKind::NEWLINE => {
-            if last_was_newline || token.newline_count() > 1 {
-              return true;
-            }
-            last_was_newline = true;
-          }
-          SyntaxKind::WHITESPACE => continue,
-          _ => return false,
-        },
-        NodeOrToken::Node(_) => return false,
+  sort_units(&mut units, |left, right| cmp(left, right));
+
+  let sorted = units
+    .into_iter()
+    .flat_map(|unit| {
+      let leading_blank = unit.leading_blank;
+      let mut entry = unit.value;
+      let mut items = Vec::with_capacity(unit.leading_comments.len() + 1);
+      let mut comments = unit.leading_comments.into_iter();
+      match comments.next() {
+        Some(mut first) => {
+          // the entry keeps its own flag, which is the blank between the comments and itself
+          first.blank_line_before = leading_blank;
+          items.push(RootItem::Comment(first));
+          items.extend(comments.map(RootItem::Comment));
+        }
+        None => entry.blank_line_before = leading_blank,
       }
+      items.push(RootItem::Entry(entry));
+      items
+    })
+    .chain(trailing.into_iter().map(RootItem::Comment))
+    .collect::<Vec<_>>();
+  items.splice(start..start, sorted);
+}
+
+/// Sorts `units` in place, treating a blank line as a divider the author put there deliberately:
+/// each run between blank lines is sorted on its own and runs never move past each other.
+///
+/// The comments above a run's first entry are treated as belonging to the run rather than to that
+/// entry, so a heading like `# exts` stays at the top of its run instead of being carried off to
+/// wherever its entry happens to sort.
+fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
+  let mut group_start = 0;
+  while group_start < units.len() {
+    let mut group_end = group_start + 1;
+    while group_end < units.len() && !units[group_end].starts_group {
+      group_end += 1;
     }
 
-    false
-  }
+    let group = &mut units[group_start..group_end];
+    let group_comments = std::mem::take(&mut group[0].leading_comments);
+    let leading_blank = group[0].leading_blank;
 
-  fn get_previous_trivia(&self) -> Vec<SyntaxToken> {
-    let mut trivia = Vec::new();
-    let mut element: SyntaxElement = self.clone().into();
-    while let Some(sibling) = element.prev_sibling_or_token() {
-      element = sibling.clone();
-      match sibling {
-        NodeOrToken::Token(token) => match token.kind() {
-          SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE | SyntaxKind::COMMENT => trivia.push(token),
-          _ => break,
-        },
-        NodeOrToken::Node(_) => break,
-      }
+    group.sort_by(|left, right| cmp(&left.value, &right.value));
+
+    for unit in group.iter_mut() {
+      unit.leading_blank = false;
     }
-    trivia.reverse();
-    trivia
+    group[0].leading_comments.splice(0..0, group_comments);
+    group[0].leading_blank = leading_blank;
+
+    group_start = group_end;
   }
 }

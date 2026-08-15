@@ -126,3 +126,21 @@ b = "2"
 # 3
 c = "4"
 d = "3"
+
+== should not invent blank lines in an array when sorting moves an entry ==
+[package]
+zzz = "last"
+keywords = [
+  "macros",
+  "syn",
+]
+name = "x"
+
+[expect]
+[package]
+name = "x"
+keywords = [
+  "macros",
+  "syn",
+]
+zzz = "last"

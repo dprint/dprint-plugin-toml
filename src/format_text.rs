@@ -2,13 +2,14 @@ use super::configuration::Configuration;
 use super::generation::generate;
 use crate::cargo;
 
+use crate::ast::Root;
 use crate::error::FormatError;
 use crate::error::ParseError;
+use crate::parser;
 
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::formatting::PrintOptions;
 use std::path::Path;
-use taplo::syntax::SyntaxNode;
 
 pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<Option<String>, FormatError> {
   let result = format_text_inner(file_path, text, config)?;
@@ -21,47 +22,42 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
 
 fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
   let text = strip_bom(text);
-  let node = parse_and_process_node(file_path, text, config)?;
+  let root = parse_and_process_node(file_path, text, config)?;
 
   Ok(dprint_core::formatting::format(
-    || generate(node, text, config),
+    || generate(&root, config),
     config_to_print_options(text, config),
   ))
 }
 
 #[cfg(feature = "tracing")]
 pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprint_core::formatting::TracingResult {
-  let node = parse_and_process_node(file_path, text, config).unwrap();
+  let root = parse_and_process_node(file_path, text, config).unwrap();
 
-  dprint_core::formatting::trace_printing(|| generate(node, text, config), config_to_print_options(text, config))
+  dprint_core::formatting::trace_printing(|| generate(&root, config), config_to_print_options(text, config))
 }
 
 fn strip_bom(text: &str) -> &str {
   text.strip_prefix("\u{FEFF}").unwrap_or(text)
 }
 
-fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<SyntaxNode, FormatError> {
-  let node = parse_taplo(text)?;
+fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<Root, FormatError> {
+  let mut root = parse(text)?;
 
-  Ok(if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
-    cargo::apply_cargo_toml_conventions(node)
-  } else {
-    node
-  })
+  if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
+    cargo::apply_cargo_toml_conventions(&mut root);
+  }
+  Ok(root)
 }
 
-fn parse_taplo(text: &str) -> Result<SyntaxNode, ParseError> {
-  let parse_result = taplo::parser::parse(text);
-
-  if let Some(err) = parse_result.errors.first() {
-    Err(ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
-      Some((err.range.start().into(), err.range.end().into())),
+fn parse(text: &str) -> Result<Root, ParseError> {
+  parser::parse(text).map_err(|err| {
+    ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
+      Some((err.span.start, err.span.end)),
       &err.message,
       text,
-    )))
-  } else {
-    Ok(parse_result.into_syntax())
-  }
+    ))
+  })
 }
 
 fn config_to_print_options(text: &str, config: &Configuration) -> PrintOptions {

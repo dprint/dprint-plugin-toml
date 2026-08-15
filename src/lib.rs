@@ -1,9 +1,10 @@
+mod ast;
 mod cargo;
 pub mod configuration;
 mod error;
 mod format_text;
 mod generation;
-mod rowan_extensions;
+mod parser;
 
 pub use error::FormatError;
 pub use error::ParseError;
