@@ -144,3 +144,19 @@ keywords = [
   "syn",
 ]
 zzz = "last"
+
+== should keep a blank line under a group's comments when sorting reorders the group ==
+[dependencies]
+# a
+# b
+
+z = 1
+y = 2
+
+[expect]
+[dependencies]
+# a
+# b
+
+y = 2
+z = 1

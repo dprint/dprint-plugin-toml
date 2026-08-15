@@ -89,6 +89,7 @@ fn sort_workspace_members(entry: &mut Entry) {
     .drain(..)
     .map(|mut value| Unit {
       leading_blank: value.leading_comments.first().map(|c| c.blank_line_before).unwrap_or(value.blank_line_before),
+      inner_blank: !value.leading_comments.is_empty() && value.blank_line_before,
       starts_group: value.blank_line_before || value.leading_comments.iter().any(|c| c.blank_line_before),
       leading_comments: std::mem::take(&mut value.leading_comments),
       value,
@@ -99,7 +100,10 @@ fn sort_workspace_members(entry: &mut Entry) {
     .into_iter()
     .map(|mut unit| {
       match unit.leading_comments.first_mut() {
-        Some(first) => first.blank_line_before = unit.leading_blank,
+        Some(first) => {
+          first.blank_line_before = unit.leading_blank;
+          unit.value.blank_line_before = unit.inner_blank;
+        }
         None => unit.value.blank_line_before = unit.leading_blank,
       }
       ArrayValue {
@@ -112,7 +116,8 @@ fn sort_workspace_members(entry: &mut Entry) {
 
 fn scalar_text(value: &Value) -> &str {
   match &value.kind {
-    ValueKind::Scalar(text) | ValueKind::MultiLineString(text) => text,
+    ValueKind::Scalar(text) => text,
+    // the all-strings guard admits nothing else
     _ => "",
   }
 }
@@ -122,9 +127,12 @@ struct Unit<T> {
   leading_comments: Vec<Comment>,
   /// Whether a blank line is rendered above this unit's first element.
   leading_blank: bool,
+  /// Whether a blank line is rendered between this unit's comments and the item itself. Only
+  /// meaningful when the unit has comments.
+  inner_blank: bool,
   /// Whether a blank line appears anywhere between the previous item and this one, which the
   /// author uses to divide a section into groups. It may sit either above this unit's comments or
-  /// between them and the item itself, and only the former is `leading_blank`.
+  /// between them and the item itself.
   starts_group: bool,
   value: T,
 }
@@ -141,6 +149,7 @@ fn sort_section(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl 
       RootItem::Comment(comment) => pending.push(comment),
       RootItem::Entry(entry) => units.push(Unit {
         leading_blank: pending.first().map(|c| c.blank_line_before).unwrap_or(entry.blank_line_before),
+        inner_blank: !pending.is_empty() && entry.blank_line_before,
         starts_group: entry.blank_line_before || pending.iter().any(|c| c.blank_line_before),
         leading_comments: std::mem::take(&mut pending),
         value: entry,
@@ -162,10 +171,10 @@ fn sort_section(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl 
       let mut comments = unit.leading_comments.into_iter();
       match comments.next() {
         Some(mut first) => {
-          // the entry keeps its own flag, which is the blank between the comments and itself
           first.blank_line_before = leading_blank;
           items.push(RootItem::Comment(first));
           items.extend(comments.map(RootItem::Comment));
+          entry.blank_line_before = unit.inner_blank;
         }
         None => entry.blank_line_before = leading_blank,
       }
@@ -192,16 +201,25 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
     }
 
     let group = &mut units[group_start..group_end];
+    // The group's leading comments belong to the group rather than to the entry they sat above, so
+    // they stay at its top. Any blank line beneath them is part of that heading and travels with it.
     let group_comments = std::mem::take(&mut group[0].leading_comments);
     let leading_blank = group[0].leading_blank;
+    let inner_blank = std::mem::replace(&mut group[0].inner_blank, false);
 
     group.sort_by(|left, right| cmp(&left.value, &right.value));
 
     for unit in group.iter_mut() {
       unit.leading_blank = false;
     }
-    group[0].leading_comments.splice(0..0, group_comments);
-    group[0].leading_blank = leading_blank;
+    let head = &mut group[0];
+    match head.leading_comments.first_mut() {
+      // the blank now separates the group's heading from the comments of whichever entry sorted first
+      Some(first) => first.blank_line_before = inner_blank,
+      None => head.inner_blank = inner_blank,
+    }
+    head.leading_comments.splice(0..0, group_comments);
+    head.leading_blank = leading_blank;
 
     group_start = group_end;
   }
