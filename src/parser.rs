@@ -32,7 +32,7 @@ pub struct SyntaxError {
 
 /// Parses TOML text into a [`Root`].
 pub fn parse(text: &str) -> Result<Root<'_>, SyntaxError> {
-  let mut parser = Parser { text, pos: 0 };
+  let mut parser = Parser { text, pos: 0, depth: 0 };
   parser.parse_root()
 }
 
@@ -45,9 +45,19 @@ fn is_bare_key_char(c: char) -> bool {
   c.is_ascii_alphanumeric() || c == '_' || c == '-'
 }
 
+/// How deeply arrays and inline tables may be nested within one another.
+///
+/// Each level costs a stack frame, and running out of stack aborts the process rather than raising
+/// an error a host could catch — on wasm, where the plugin runs with a small stack and no guard
+/// page, the overflow isn't even detected. Real TOML nests a handful of levels deep, so a limit
+/// well below where the stack runs out turns the crash into a syntax error and costs nothing.
+const MAX_NESTING_DEPTH: usize = 128;
+
 struct Parser<'a> {
   text: &'a str,
   pos: usize,
+  /// How many arrays and inline tables enclose the value being parsed.
+  depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -261,17 +271,28 @@ impl<'a> Parser<'a> {
     })
   }
 
+  /// Parses a collection one level further in, refusing to recurse past [`MAX_NESTING_DEPTH`].
+  fn parse_nested<T>(&mut self, parse: impl FnOnce(&mut Self) -> Result<T, SyntaxError>) -> Result<T, SyntaxError> {
+    if self.depth >= MAX_NESTING_DEPTH {
+      return self.error_here("arrays and inline tables are nested too deeply");
+    }
+    self.depth += 1;
+    let result = parse(self);
+    self.depth -= 1;
+    result
+  }
+
   // ---- values ----
 
   fn parse_value(&mut self) -> Result<Value<'a>, SyntaxError> {
     let start = self.pos;
     match self.peek() {
       Some('[') => {
-        let array = self.parse_array()?;
+        let array = self.parse_nested(Self::parse_array)?;
         Ok(Value { kind: ValueKind::Array(array) })
       }
       Some('{') => {
-        let table = self.parse_inline_table()?;
+        let table = self.parse_nested(Self::parse_inline_table)?;
         Ok(Value {
           kind: ValueKind::InlineTable(table),
         })

@@ -13,6 +13,20 @@ fn should_handle_windows_newlines() {
 
 /// The parser's diagnostics have no spec coverage, since a spec asserts formatted output rather
 /// than a failure. A lone carriage return is here because it used to spin forever.
+/// Nesting deeply enough to run out of stack aborts the process rather than raising an error, so
+/// the parser refuses well before that.
+#[test]
+fn should_reject_deeply_nested_collections() {
+  let config = ConfigurationBuilder::new().build();
+  for text in [format!("a = {}", "[".repeat(200)), format!("a = {}", "{ b = ".repeat(200))] {
+    let error = format_text(&PathBuf::from("file.toml"), &text, &config).unwrap_err().to_string();
+    assert!(error.contains("nested too deeply"), "got {error}");
+  }
+  // a depth a real document might plausibly reach is still accepted
+  let nested = format!("a = {}{}", "[".repeat(16), "]".repeat(16));
+  assert!(format_text(&PathBuf::from("file.toml"), &nested, &config).is_ok());
+}
+
 #[test]
 fn should_report_parse_errors() {
   let config = ConfigurationBuilder::new().build();
