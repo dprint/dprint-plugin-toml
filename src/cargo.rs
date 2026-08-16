@@ -9,28 +9,54 @@ pub fn is_cargo_toml_file(file_path: &Path) -> bool {
   file_path.file_name().map(|n| n == "Cargo.toml").unwrap_or(false)
 }
 
+/// A table whose contents the conventions rearrange, plus `[workspace]`, whose `members` entry
+/// they rearrange.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Section {
+  Package,
+  Dependencies,
+  Workspace,
+  Other,
+}
+
+fn section_of(header: &TableHeader) -> Section {
+  // an array of tables holds repeated elements rather than one table's keys, so it is never a
+  // section the conventions sort, whatever it is named
+  if header.is_array_of_tables {
+    return Section::Other;
+  }
+  let key = &header.key;
+  if key.names("package") || key.names("workspace.package") {
+    Section::Package
+  } else if key.names("dependencies") || key.names("dev-dependencies") || key.names("workspace.dependencies") {
+    Section::Dependencies
+  } else if key.names("workspace") {
+    Section::Workspace
+  } else {
+    Section::Other
+  }
+}
+
 pub fn apply_cargo_toml_conventions(root: &mut Root) {
   let mut index = 0;
-  let mut last_header: Option<String> = None;
+  let mut last_header = Section::Other;
 
   while index < root.items.len() {
     match &root.items[index] {
       RootItem::TableHeader(header) => {
-        let name = if header.is_array_of_tables { String::new() } else { header.key.text() };
+        let section = section_of(header);
         let end = section_end(&root.items, index + 1);
-        match name.as_str() {
-          "package" | "workspace.package" => sort_section(&mut root.items, index + 1, end, &sort_cargo_package_section),
-          "dependencies" | "dev-dependencies" | "workspace.dependencies" => {
-            sort_section(&mut root.items, index + 1, end, &|left, right| entry_sort_key(left).cmp(entry_sort_key(right)))
-          }
-          _ => {}
+        match section {
+          Section::Package => sort_section(&mut root.items, index + 1, end, &sort_cargo_package_section),
+          Section::Dependencies => sort_section(&mut root.items, index + 1, end, &|left, right| entry_sort_key(left).cmp(entry_sort_key(right))),
+          Section::Workspace | Section::Other => {}
         }
-        last_header = Some(name);
+        last_header = section;
         // sorting a section doesn't change how many items it has, so the walk just continues
         index += 1;
       }
       RootItem::Entry(entry) => {
-        if last_header.as_deref() == Some("workspace") && entry_sort_key(entry) == "members" {
+        if last_header == Section::Workspace && entry_sort_key(entry) == "members" {
           if let RootItem::Entry(entry) = &mut root.items[index] {
             sort_workspace_members(entry);
           }
@@ -54,8 +80,8 @@ fn section_end(items: &[RootItem], start: usize) -> usize {
 
 /// The name an entry sorts under. Only the first segment of a dotted key is used, so that
 /// `serde.workspace` sorts beside `serde`.
-fn entry_sort_key(entry: &Entry) -> &str {
-  entry.key.parts.first().map(|p| p.text.as_str()).unwrap_or("")
+fn entry_sort_key<'a>(entry: &'a Entry<'_>) -> &'a str {
+  entry.key.first.text
 }
 
 fn sort_cargo_package_section(left: &Entry, right: &Entry) -> Ordering {
@@ -114,7 +140,7 @@ fn sort_workspace_members(entry: &mut Entry) {
     .collect();
 }
 
-fn scalar_text(value: &Value) -> &str {
+fn scalar_text<'a>(value: &'a Value<'_>) -> &'a str {
   match &value.kind {
     ValueKind::Scalar(text) => text,
     // the all-strings guard admits nothing else
@@ -123,8 +149,8 @@ fn scalar_text(value: &Value) -> &str {
 }
 
 /// One sortable thing along with the comments written above it.
-struct Unit<T> {
-  leading_comments: Vec<Comment>,
+struct Unit<'a, T> {
+  leading_comments: Vec<Comment<'a>>,
   /// Whether a blank line is rendered above this unit's first element.
   leading_blank: bool,
   /// Whether a blank line is rendered between this unit's comments and the item itself. Only

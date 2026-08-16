@@ -41,7 +41,7 @@ fn strip_bom(text: &str) -> &str {
   text.strip_prefix("\u{FEFF}").unwrap_or(text)
 }
 
-fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<Root, FormatError> {
+fn parse_and_process_node<'a>(file_path: &Path, text: &'a str, config: &Configuration) -> Result<Root<'a>, FormatError> {
   let mut root = parse(text)?;
 
   if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
@@ -50,7 +50,7 @@ fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) 
   Ok(root)
 }
 
-fn parse(text: &str) -> Result<Root, ParseError> {
+fn parse(text: &str) -> Result<Root<'_>, ParseError> {
   parser::parse(text).map_err(|err| {
     let (start, end) = highlight_range(&err, text);
     ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(

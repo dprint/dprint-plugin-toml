@@ -78,11 +78,11 @@ fn gen_entry_without_trailing_comment(entry: &Entry, context: &mut Context) -> P
 /// Spec: A key may be either bare, quoted, or dotted.
 fn gen_key(key: &Key) -> PrintItems {
   let mut items = PrintItems::new();
-  for (i, part) in key.parts.iter().enumerate() {
+  for (i, part) in key.parts().enumerate() {
     if i > 0 {
       items.push_sc(sc!("."));
     }
-    items.extend(ir_helpers::gen_from_string(&part.text));
+    items.extend(ir_helpers::gen_from_string(part.text));
   }
   items
 }
@@ -150,7 +150,7 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
       if array.values.is_empty() {
         return if force_use_new_lines { Signal::NewLine.into() } else { PrintItems::new() };
       }
-      gen_separated(array.values.iter().map(SeparatedItem::from).collect(), force_use_new_lines, context)
+      gen_separated(&array.values, force_use_new_lines, context)
     },
     context,
   )
@@ -210,7 +210,7 @@ fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> Pr
       if table.entries.is_empty() {
         return Signal::NewLine.into();
       }
-      gen_separated(table.entries.iter().map(SeparatedItem::from).collect(), true, context)
+      gen_separated(&table.entries, true, context)
     },
     context,
   )
@@ -221,8 +221,8 @@ fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> Pr
 struct SurroundedParams<'a> {
   open: &'static StringContainer,
   close: &'static StringContainer,
-  comment_after_open: Option<&'a Comment>,
-  comments_before_close: &'a [Comment],
+  comment_after_open: Option<&'a Comment<'a>>,
+  comments_before_close: &'a [Comment<'a>],
 }
 
 fn gen_surrounded(params: SurroundedParams, gen_inner: impl FnOnce(&mut Context) -> PrintItems, context: &mut Context) -> PrintItems {
@@ -248,22 +248,22 @@ fn gen_surrounded(params: SurroundedParams, gen_inner: impl FnOnce(&mut Context)
 
 /// One comma separated item of an array or a multi-line inline table.
 struct SeparatedItem<'a> {
-  leading_comments: &'a [Comment],
+  leading_comments: &'a [Comment<'a>],
   /// Whether a blank line sits between the last leading comment and the item itself.
   blank_line_before: bool,
-  trailing_comment: Option<&'a Comment>,
+  trailing_comment: Option<&'a Comment<'a>>,
   /// Whether a blank line separates this whole item, comments included, from the one before it.
   blank_line_before_item: bool,
   entry: SeparatedItemValue<'a>,
 }
 
 enum SeparatedItemValue<'a> {
-  Value(&'a Value),
-  Entry(&'a Entry),
+  Value(&'a Value<'a>),
+  Entry(&'a Entry<'a>),
 }
 
-impl<'a> From<&'a ArrayValue> for SeparatedItem<'a> {
-  fn from(value: &'a ArrayValue) -> Self {
+impl<'a> From<&'a ArrayValue<'a>> for SeparatedItem<'a> {
+  fn from(value: &'a ArrayValue<'a>) -> Self {
     SeparatedItem {
       leading_comments: &value.leading_comments,
       blank_line_before: value.blank_line_before,
@@ -274,8 +274,8 @@ impl<'a> From<&'a ArrayValue> for SeparatedItem<'a> {
   }
 }
 
-impl<'a> From<&'a Entry> for SeparatedItem<'a> {
-  fn from(entry: &'a Entry) -> Self {
+impl<'a> From<&'a Entry<'a>> for SeparatedItem<'a> {
+  fn from(entry: &'a Entry<'a>) -> Self {
     SeparatedItem {
       leading_comments: &entry.leading_comments,
       blank_line_before: entry.blank_line_before,
@@ -287,14 +287,19 @@ impl<'a> From<&'a Entry> for SeparatedItem<'a> {
 }
 
 /// A blank line above an item sits above its comments when it has any.
-fn blank_line_before_item(leading_comments: &[Comment], blank_line_before: bool) -> bool {
+fn blank_line_before_item(leading_comments: &[Comment<'_>], blank_line_before: bool) -> bool {
   match leading_comments.first() {
     Some(comment) => comment.blank_line_before,
     None => blank_line_before,
   }
 }
 
-fn gen_separated(items: Vec<SeparatedItem>, force_use_new_lines: bool, context: &mut Context) -> PrintItems {
+/// `items` is the array's values or the table's entries; each is turned into a [`SeparatedItem`]
+/// as it is reached rather than up front, so the whole run is never collected into a `Vec`.
+fn gen_separated<'a, T>(items: &'a [T], force_use_new_lines: bool, context: &mut Context) -> PrintItems
+where
+  &'a T: Into<SeparatedItem<'a>>,
+{
   let indent_width = context.config.indent_width;
   ir_helpers::gen_separated_values(
     |is_multi_line_ref| {
@@ -304,7 +309,7 @@ fn gen_separated(items: Vec<SeparatedItem>, force_use_new_lines: bool, context: 
       // author asked for one, and the item may since have been moved by the Cargo.toml sorting,
       // which would leave any position taken from the source pointing at the wrong line.
       let mut line = 0;
-      for (i, item) in items.into_iter().enumerate() {
+      for (i, item) in items.iter().map(Into::into).enumerate() {
         if i > 0 {
           line += if item.blank_line_before_item { 2 } else { 1 };
         }
@@ -378,27 +383,35 @@ fn gen_separated_item(item: SeparatedItem, generated_comma: PrintItems, context:
 fn gen_comment(comment: &Comment, context: &mut Context) -> PrintItems {
   let mut items = PrintItems::new();
   items.push_condition(if_false("spaceIfNotStartOfLine", condition_resolvers::is_start_of_line(), " ".into()));
-  items.extend({
-    if context.config.comment_force_leading_space {
-      let info = get_comment_text_info(&comment.text);
-      let after_hash_text = &comment.text[info.start_text_index..].trim_end();
-      let mut text = "#".repeat(info.leading_hashes_count);
-      if info.has_exclamation_point {
-        text.push('!');
-      }
-      if !after_hash_text.is_empty() {
-        if !info.has_leading_whitespace {
-          text.push(' ');
-        }
-        text.push_str(after_hash_text);
-      }
-      ir_helpers::gen_from_raw_string(&text)
-    } else {
-      ir_helpers::gen_from_raw_string(&comment.text)
-    }
-  });
+  items.extend(gen_comment_text(comment, context));
   items.push_signal(Signal::ExpectNewLine);
   items
+}
+
+fn gen_comment_text(comment: &Comment, context: &mut Context) -> PrintItems {
+  if !context.config.comment_force_leading_space {
+    return ir_helpers::gen_from_raw_string(comment.text);
+  }
+
+  let info = get_comment_text_info(comment.text);
+  let after_hash_text = comment.text[info.start_text_index..].trim_end();
+  // Nothing is inserted when the text after the hashes already begins with whitespace, or when
+  // there is no text at all, so rebuilding would only reproduce the source text. Almost every
+  // comment in a real file takes this path, and rendering the slice saves building the copy.
+  if info.has_leading_whitespace || after_hash_text.is_empty() {
+    return ir_helpers::gen_from_raw_string(&comment.text[..info.start_text_index + after_hash_text.len()]);
+  }
+
+  let mut text = String::with_capacity(comment.text.len() + 1);
+  for _ in 0..info.leading_hashes_count {
+    text.push('#');
+  }
+  if info.has_exclamation_point {
+    text.push('!');
+  }
+  text.push(' ');
+  text.push_str(after_hash_text);
+  ir_helpers::gen_from_raw_string(&text)
 }
 
 struct CommentTextInfo {

@@ -31,7 +31,7 @@ pub struct SyntaxError {
 }
 
 /// Parses TOML text into a [`Root`].
-pub fn parse(text: &str) -> Result<Root, SyntaxError> {
+pub fn parse(text: &str) -> Result<Root<'_>, SyntaxError> {
   let mut parser = Parser { text, pos: 0 };
   parser.parse_root()
 }
@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
   // ---- comments ----
 
   /// Parses a comment, which runs to the end of the line. The terminating newline is left alone.
-  fn parse_comment(&mut self, blank_line_before: bool) -> Comment {
+  fn parse_comment(&mut self, blank_line_before: bool) -> Comment<'a> {
     let start = self.pos;
     while let Some(c) = self.peek() {
       if c == '\n' || c == '\r' {
@@ -120,13 +120,13 @@ impl<'a> Parser<'a> {
     Comment {
       // trailing spaces and tabs on a comment line are insignificant, but `trim_end` would also
       // take Unicode whitespace such as a no-break space, which is legitimate comment content
-      text: self.text[start..self.pos].trim_end_matches([' ', '\t']).to_string(),
+      text: self.text[start..self.pos].trim_end_matches([' ', '\t']),
       blank_line_before,
     }
   }
 
   /// Consumes spaces and, if a comment follows on the same line, parses it.
-  fn parse_trailing_comment(&mut self) -> Option<Comment> {
+  fn parse_trailing_comment(&mut self) -> Option<Comment<'a>> {
     self.skip_spaces();
     if self.peek() == Some('#') {
       Some(self.parse_comment(false))
@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
 
   // ---- root ----
 
-  fn parse_root(&mut self) -> Result<Root, SyntaxError> {
+  fn parse_root(&mut self) -> Result<Root<'a>, SyntaxError> {
     let mut items = Vec::new();
     let mut newlines = 0usize;
     loop {
@@ -178,7 +178,7 @@ impl<'a> Parser<'a> {
     Ok(Root { items })
   }
 
-  fn parse_table_header(&mut self, blank_line_before: bool) -> Result<TableHeader, SyntaxError> {
+  fn parse_table_header(&mut self, blank_line_before: bool) -> Result<TableHeader<'a>, SyntaxError> {
     self.bump(); // '['
     let is_array_of_tables = self.peek() == Some('[');
     if is_array_of_tables {
@@ -203,7 +203,7 @@ impl<'a> Parser<'a> {
     })
   }
 
-  fn parse_entry(&mut self, blank_line_before: bool, leading_comments: Vec<Comment>) -> Result<Entry, SyntaxError> {
+  fn parse_entry(&mut self, blank_line_before: bool, leading_comments: Vec<Comment<'a>>) -> Result<Entry<'a>, SyntaxError> {
     let key = self.parse_key()?;
     self.skip_spaces();
     if self.peek() != Some('=') {
@@ -224,22 +224,24 @@ impl<'a> Parser<'a> {
 
   // ---- keys ----
 
-  fn parse_key(&mut self) -> Result<Key, SyntaxError> {
-    let mut parts = Vec::new();
+  fn parse_key(&mut self) -> Result<Key<'a>, SyntaxError> {
+    self.skip_spaces();
+    let first = self.parse_key_part()?;
+    // a dotted key is the exception, so `rest` stays empty and unallocated for most keys
+    let mut rest = Vec::new();
     loop {
       self.skip_spaces();
-      parts.push(self.parse_key_part()?);
-      self.skip_spaces();
-      if self.peek() == Some('.') {
-        self.bump();
-      } else {
+      if self.peek() != Some('.') {
         break;
       }
+      self.bump();
+      self.skip_spaces();
+      rest.push(self.parse_key_part()?);
     }
-    Ok(Key { parts })
+    Ok(Key { first, rest })
   }
 
-  fn parse_key_part(&mut self) -> Result<KeyPart, SyntaxError> {
+  fn parse_key_part(&mut self) -> Result<KeyPart<'a>, SyntaxError> {
     let start = self.pos;
     if self.starts_with("\"\"\"") || self.starts_with("'''") {
       return self.error_here("a key cannot be a multi-line string");
@@ -255,13 +257,13 @@ impl<'a> Parser<'a> {
       _ => return self.error_here("expected a key"),
     }
     Ok(KeyPart {
-      text: self.text[start..self.pos].to_string(),
+      text: &self.text[start..self.pos],
     })
   }
 
   // ---- values ----
 
-  fn parse_value(&mut self) -> Result<Value, SyntaxError> {
+  fn parse_value(&mut self) -> Result<Value<'a>, SyntaxError> {
     let start = self.pos;
     match self.peek() {
       Some('[') => {
@@ -281,7 +283,7 @@ impl<'a> Parser<'a> {
         } else {
           self.scan_literal_string()?;
         }
-        let text = self.text[start..self.pos].to_string();
+        let text = &self.text[start..self.pos];
         Ok(Value {
           kind: if is_multi_line {
             ValueKind::MultiLineString(text)
@@ -293,7 +295,7 @@ impl<'a> Parser<'a> {
       Some(_) => {
         self.scan_bare_value()?;
         Ok(Value {
-          kind: ValueKind::Scalar(self.text[start..self.pos].to_string()),
+          kind: ValueKind::Scalar(&self.text[start..self.pos]),
         })
       }
       None => self.error_here("expected a value"),
@@ -435,7 +437,7 @@ impl<'a> Parser<'a> {
 
   // ---- arrays ----
 
-  fn parse_array(&mut self) -> Result<Array, SyntaxError> {
+  fn parse_array(&mut self) -> Result<Array<'a>, SyntaxError> {
     let start = self.pos;
     self.bump(); // '['
 
@@ -444,8 +446,8 @@ impl<'a> Parser<'a> {
     let comment_after_open = self.parse_trailing_comment();
     let multi_line_in_source = comment_after_open.is_some() || matches!(self.peek(), Some('\n') | Some('\r'));
 
-    let mut values: Vec<ArrayValue> = Vec::new();
-    let mut pending_comments: Vec<Comment> = Vec::new();
+    let mut values: Vec<ArrayValue<'a>> = Vec::new();
+    let mut pending_comments: Vec<Comment<'a>> = Vec::new();
     let mut newlines = 0usize;
     let mut separated = true;
 
@@ -527,7 +529,7 @@ impl<'a> Parser<'a> {
 
   // ---- inline tables ----
 
-  fn parse_inline_table(&mut self) -> Result<InlineTable, SyntaxError> {
+  fn parse_inline_table(&mut self) -> Result<InlineTable<'a>, SyntaxError> {
     let start = self.pos;
     self.bump(); // '{'
 
@@ -536,8 +538,8 @@ impl<'a> Parser<'a> {
     let comment_after_open = self.parse_trailing_comment();
     let multi_line_in_source = comment_after_open.is_some() || matches!(self.peek(), Some('\n') | Some('\r'));
 
-    let mut entries: Vec<Entry> = Vec::new();
-    let mut pending_comments: Vec<Comment> = Vec::new();
+    let mut entries: Vec<Entry<'a>> = Vec::new();
+    let mut pending_comments: Vec<Comment<'a>> = Vec::new();
     let mut newlines = 0usize;
     let mut separated = true;
 
