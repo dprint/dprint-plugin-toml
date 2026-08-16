@@ -52,12 +52,35 @@ fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) 
 
 fn parse(text: &str) -> Result<Root, ParseError> {
   parser::parse(text).map_err(|err| {
+    let (start, end) = highlight_range(&err, text);
     ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
-      Some((err.span.start, err.span.end)),
+      Some((start, end)),
       &err.message,
       text,
     ))
   })
+}
+
+/// The range to underline beneath the offending line.
+///
+/// The diagnostic only underlines within a single line, and draws nothing at all for an empty range
+/// or one that runs past the end of its line — which is exactly what an error at the end of the
+/// input or inside an unterminated string produces. Keeping the range on its own line, and at least
+/// one character wide, means every error gets a caret.
+fn highlight_range(err: &parser::SyntaxError, text: &str) -> (usize, usize) {
+  let line_end = text[err.span.start..].find('\n').map(|i| err.span.start + i).unwrap_or(text.len());
+  let end = err.span.end.min(line_end);
+  if end > err.span.start {
+    (err.span.start, end)
+  } else {
+    // an empty range still needs something to point at: the character it sits before, or the one
+    // it sits after when there is nothing left in the input
+    let start = err.span.start.min(text.len());
+    match text[start..].chars().next() {
+      Some(c) => (start, start + c.len_utf8()),
+      None => (text[..start].chars().next_back().map(|c| start - c.len_utf8()).unwrap_or(start), start),
+    }
+  }
 }
 
 fn config_to_print_options(text: &str, config: &Configuration) -> PrintOptions {

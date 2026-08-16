@@ -148,6 +148,9 @@ impl<'a> Parser<'a> {
         newlines += 1;
         continue;
       }
+      if self.peek() == Some('\r') {
+        return self.error_here("expected a line feed after the carriage return");
+      }
 
       // the newline that ends the previous item's line counts as one, so a blank line is two
       let blank_line_before = !items.is_empty() && newlines >= 2;
@@ -168,7 +171,7 @@ impl<'a> Parser<'a> {
 
       // an item and its trailing comment have to be the last thing on their line
       if !self.is_eof() && !matches!(self.peek(), Some('\n') | Some('\r')) {
-        return self.error_here("expected a newline after the value");
+        return self.error_here("expected a newline");
       }
     }
     Ok(Root { items })
@@ -406,9 +409,16 @@ impl<'a> Parser<'a> {
             self.bump();
           }
           let run_len = self.pos - run_start;
+          if run_len > 5 {
+            // three close the string and at most two more can be content, so this can't terminate
+            return self.error(
+              format!("too many {quote:?} in a row to end a multi-line string"),
+              Span::new(run_start, self.pos),
+            );
+          }
           if run_len >= 3 {
             // at most two of the run's quotes are content; the rest closes the string
-            self.pos = run_start + run_len.min(5);
+            self.pos = run_start + run_len;
             return Ok(());
           }
         }
@@ -425,8 +435,8 @@ impl<'a> Parser<'a> {
     let start = self.pos;
     self.bump(); // '['
 
-    // Only what directly follows the bracket decides this. A collection whose first item sits on
-    // the opening line stays on one line however its later items were laid out.
+    // Only what directly follows the bracket decides this, so a collection whose first item sits
+    // on the opening line is not considered multi-line however its later items were laid out.
     let comment_after_open = self.parse_trailing_comment();
     let multi_line_in_source = comment_after_open.is_some() || matches!(self.peek(), Some('\n') | Some('\r'));
 
@@ -516,8 +526,8 @@ impl<'a> Parser<'a> {
     let start = self.pos;
     self.bump(); // '{'
 
-    // Only what directly follows the bracket decides this. A collection whose first item sits on
-    // the opening line stays on one line however its later items were laid out.
+    // Only what directly follows the bracket decides this, so a collection whose first item sits
+    // on the opening line is not considered multi-line however its later items were laid out.
     let comment_after_open = self.parse_trailing_comment();
     let multi_line_in_source = comment_after_open.is_some() || matches!(self.peek(), Some('\n') | Some('\r'));
 
@@ -540,7 +550,8 @@ impl<'a> Parser<'a> {
           continue;
         }
         Some('#') => {
-          let comment = self.parse_comment(newlines >= 2 && (!entries.is_empty() || !pending_comments.is_empty()));
+          let has_preceding = !entries.is_empty() || !pending_comments.is_empty() || comment_after_open.is_some();
+          let comment = self.parse_comment(has_preceding && newlines >= 2);
           pending_comments.push(comment);
           newlines = 0;
           continue;

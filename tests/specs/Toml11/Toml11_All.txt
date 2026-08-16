@@ -96,3 +96,15 @@ d = { e = [{
 [expect]
 a = { b = { c = 1 } }
 d = { e = [{ f = 1 }] }
+
+== should keep a blank line under a comment on the opening brace ==
+a = { # one
+
+  # two
+}
+
+[expect]
+a = { # one
+
+  # two
+}

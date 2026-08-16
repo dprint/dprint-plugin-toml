@@ -71,16 +71,32 @@ pub struct Key {
 }
 
 impl Key {
-  /// The key's source text with the insignificant whitespace around the dots removed.
+  /// The key's segments joined by dots, with the quotes around any quoted segment removed so that
+  /// `["dependencies"]` names the same table as `[dependencies]`.
   pub fn text(&self) -> String {
-    self.parts.iter().map(|p| p.text.as_str()).collect::<Vec<_>>().join(".")
+    self.parts.iter().map(KeyPart::unquoted_text).collect::<Vec<_>>().join(".")
   }
 }
 
-/// One dot separated segment of a key. Bare, quoted and literal keys are all kept verbatim.
+/// One dot separated segment of a key. Bare, quoted and literal keys are all kept verbatim, since
+/// the formatter reproduces the segment as written.
 #[derive(Debug, Clone)]
 pub struct KeyPart {
   pub text: String,
+}
+
+impl KeyPart {
+  /// The segment with its surrounding quotes removed, naming the key rather than spelling it. Any
+  /// escape within a basic string is left as written, which is enough to compare against a plain
+  /// name like `package`.
+  pub fn unquoted_text(&self) -> &str {
+    for quote in ['"', '\''] {
+      if let Some(inner) = self.text.strip_prefix(quote).and_then(|t| t.strip_suffix(quote)) {
+        return inner;
+      }
+    }
+    &self.text
+  }
 }
 
 /// A value.
@@ -98,6 +114,22 @@ impl Value {
       ValueKind::Scalar(_) => false,
       ValueKind::Array(array) => array.values.iter().any(|v| v.value.contains_multi_line_string()),
       ValueKind::InlineTable(table) => table.entries.iter().any(|e| e.value.contains_multi_line_string()),
+    }
+  }
+
+  /// Whether a comment appears anywhere within this value.
+  pub fn contains_comment(&self) -> bool {
+    match &self.kind {
+      ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => false,
+      ValueKind::Array(array) => {
+        array.comment_after_open.is_some()
+          || !array.comments_before_close.is_empty()
+          || array
+            .values
+            .iter()
+            .any(|value| value.trailing_comment.is_some() || !value.leading_comments.is_empty() || value.value.contains_comment())
+      }
+      ValueKind::InlineTable(table) => table.contains_comment(),
     }
   }
 }
@@ -139,7 +171,7 @@ pub struct ArrayValue {
   pub value: Value,
   /// Comments on the lines immediately above the value.
   pub leading_comments: Vec<Comment>,
-  /// A comment on the same line as the value, after its comma if it has one.
+  /// A comment on the same line as the value, before or after its comma.
   pub trailing_comment: Option<Comment>,
   pub blank_line_before: bool,
 }
@@ -160,7 +192,8 @@ impl InlineTable {
   /// Whether a comment appears anywhere within this table, including inside its values.
   ///
   /// A comment runs to the end of its line, so one can only sit inside braces that already hold a
-  /// newline. Such a table is multi-line in the source whatever follows its opening brace.
+  /// newline. That makes such a table multi-line in the source even when `multi_line_in_source` is
+  /// false, since that field records only what directly follows the opening brace.
   pub fn contains_comment(&self) -> bool {
     self.comment_after_open.is_some()
       || !self.comments_before_close.is_empty()
@@ -168,23 +201,5 @@ impl InlineTable {
         .entries
         .iter()
         .any(|entry| entry.trailing_comment.is_some() || !entry.leading_comments.is_empty() || entry.value.contains_comment())
-  }
-}
-
-impl Value {
-  /// Whether a comment appears anywhere within this value.
-  pub fn contains_comment(&self) -> bool {
-    match &self.kind {
-      ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => false,
-      ValueKind::Array(array) => {
-        array.comment_after_open.is_some()
-          || !array.comments_before_close.is_empty()
-          || array
-            .values
-            .iter()
-            .any(|value| value.trailing_comment.is_some() || !value.leading_comments.is_empty() || value.value.contains_comment())
-      }
-      ValueKind::InlineTable(table) => table.contains_comment(),
-    }
   }
 }

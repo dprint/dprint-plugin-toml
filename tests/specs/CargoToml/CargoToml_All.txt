@@ -160,3 +160,13 @@ y = 2
 
 y = 2
 z = 1
+
+== should apply conventions to a quoted table header ==
+["dependencies"]
+z = "1"
+a = "2"
+
+[expect]
+["dependencies"]
+a = "2"
+z = "1"
