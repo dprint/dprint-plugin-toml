@@ -118,8 +118,9 @@ impl<'a> Parser<'a> {
       self.bump();
     }
     Comment {
-      // trailing whitespace on a comment line is insignificant
-      text: self.text[start..self.pos].trim_end().to_string(),
+      // trailing spaces and tabs on a comment line are insignificant, but `trim_end` would also
+      // take Unicode whitespace such as a no-break space, which is legitimate comment content
+      text: self.text[start..self.pos].trim_end_matches([' ', '\t']).to_string(),
       blank_line_before,
     }
   }
@@ -348,9 +349,12 @@ impl<'a> Parser<'a> {
         None | Some('\n') | Some('\r') => return self.error("unterminated string", Span::new(start, self.pos)),
         Some('\\') => {
           self.bump();
-          // whatever follows an escape is part of the string, including a quote
-          if self.bump().is_none() {
-            return self.error("unterminated string", Span::new(start, self.pos));
+          // Whatever follows an escape is part of the string, including a quote. A newline is not:
+          // the line-ending backslash belongs to multi-line strings only, and letting one through
+          // would put a newline inside a value the formatter prints on a single line.
+          match self.bump() {
+            Some('\n') | Some('\r') | None => return self.error("unterminated string", Span::new(start, self.pos)),
+            Some(_) => {}
           }
         }
         Some('"') => {
@@ -465,8 +469,9 @@ impl<'a> Parser<'a> {
           continue;
         }
         Some(',') if !separated => {
-          // a comma is allowed to trail onto a later line than the value it follows. The
-          // newlines it sat behind belong to that value's line rather than to whatever comes next.
+          // A comma is allowed to trail onto a later line than the value it follows. The newlines
+          // it sat behind belong to that value's line rather than to whatever comes next, so any
+          // blank among them is deliberately dropped rather than moved onto the next value.
           self.bump();
           separated = true;
           newlines = 0;

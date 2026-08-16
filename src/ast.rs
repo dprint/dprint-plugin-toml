@@ -161,7 +161,13 @@ impl Array {
   /// Whether the array should be printed over multiple lines. An array the author broke up is kept
   /// broken up, but one that holds nothing at all collapses.
   pub fn force_use_new_lines(&self) -> bool {
-    self.multi_line_in_source && !(self.values.is_empty() && self.comment_after_open.is_none() && self.comments_before_close.is_empty())
+    // A comment written on its own line before the closing bracket is only given a line of its own
+    // when the array is broken up. Left on one line it is printed against the last value, turning
+    // it into that value's trailing comment and formatting differently the second time around.
+    if !self.comments_before_close.is_empty() {
+      return true;
+    }
+    self.multi_line_in_source && !(self.values.is_empty() && self.comment_after_open.is_none())
   }
 }
 

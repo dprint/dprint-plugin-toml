@@ -22,6 +22,8 @@ fn should_report_parse_errors() {
     ("a = { b = 1,\rc = 2 }\n", "expected a line feed after the carriage return"),
     ("b = BAR\n", "expected a value"),
     ("a = \"unterminated\n", "unterminated string"),
+    // a line-ending backslash belongs to multi-line strings only
+    ("a = \"x\\\ny\"\n", "unterminated string"),
     ("a = [1, 2\n", "unterminated array"),
     ("a = { b = 1\n", "unterminated inline table"),
     ("a = [1 2]\n", "expected ',' between array values"),

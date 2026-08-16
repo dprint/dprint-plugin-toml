@@ -87,3 +87,24 @@ value = [
 value = [
   # comment
 ]
+
+== should break up a single line array that has a comment before the bracket ==
+a = [1, 2
+
+# c
+]
+b = [1
+# d
+]
+
+[expect]
+a = [
+  1,
+  2,
+
+  # c
+]
+b = [
+  1,
+  # d
+]
