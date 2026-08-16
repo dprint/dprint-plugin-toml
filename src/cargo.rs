@@ -86,6 +86,9 @@ fn entry_sort_key<'a>(entry: &'a Entry<'_>) -> &'a str {
 
 fn sort_cargo_package_section(left: &Entry, right: &Entry) -> Ordering {
   match (entry_sort_key(left), entry_sort_key(right)) {
+    // the ranked arms below would otherwise answer the same way in both directions for two entries
+    // sharing a key, which is not an ordering and leaves `sort_by` free to do anything
+    (left, right) if left == right => Ordering::Equal,
     ("version", "name") => Ordering::Greater,
     ("name", _) => Ordering::Less,
     ("version", _) => Ordering::Less,

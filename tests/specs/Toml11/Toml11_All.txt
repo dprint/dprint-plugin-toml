@@ -108,3 +108,19 @@ a = { # one
 
   # two
 }
+
+== should not expand a one line table over a comment inside one of its values ==
+a = { b = [
+  1, # one
+  2,
+] }
+c = { d = "x", e = ["f", "g" # note
+  # more
+] }
+
+[expect]
+a = { b = [1, # one
+2] }
+c = { d = "x", e = ["f", "g" # note
+  # more
+] }

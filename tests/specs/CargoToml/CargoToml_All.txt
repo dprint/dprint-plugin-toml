@@ -170,3 +170,15 @@ a = "2"
 ["dependencies"]
 a = "2"
 z = "1"
+
+== should be stable when two package entries share a sort key ==
+[package]
+name = "x"
+version.workspace = true
+version.foo = 1
+
+[expect]
+[package]
+name = "x"
+version.workspace = true
+version.foo = 1

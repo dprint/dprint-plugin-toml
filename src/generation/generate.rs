@@ -106,10 +106,10 @@ fn gen_value(value: &Value, context: &mut Context) -> PrintItems {
 
 fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
   if context.is_in_single_line_table() {
-    // An inline table the author wrote on one line stays on one line, so nothing inside it may
-    // wrap. Hard separators do that without a force-no-new-lines scope, which would also strip the
-    // newlines belonging to any multi-line string in the array. Comments are still written out;
-    // one forces a newline of its own, but dropping it would lose what the author wrote.
+    // An array within a table that has to stay on one line is collapsed onto that line, so its
+    // values are separated by hard spaces rather than by anything that could break. Its comments
+    // are still written: a comment ends its own line whatever we do, and those newlines sit within
+    // a value, which TOML 1.0 allows between the braces.
     return gen_surrounded(
       SurroundedParams {
         open: sc!("["),
@@ -120,14 +120,20 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
       |context| {
         let mut items = PrintItems::new();
         for (i, value) in array.values.iter().enumerate() {
-          if i > 0 {
-            items.push_sc(sc!(", "));
+          // space away from the previous value, unless its comment already ended that line
+          if i > 0 && array.values[i - 1].trailing_comment.is_none() {
+            items.push_sc(sc!(" "));
           }
           for comment in &value.leading_comments {
             items.extend(gen_comment(comment, context));
             items.push_signal(Signal::NewLine);
           }
           items.extend(gen_value(&value.value, context));
+          // the comma goes before the comment rather than after it, so that a comment ending its
+          // line doesn't leave the next value's comma leading the line beneath
+          if i + 1 < array.values.len() {
+            items.push_sc(sc!(","));
+          }
           if let Some(comment) = &value.trailing_comment {
             items.extend(gen_comment(comment, context));
           }
@@ -161,12 +167,14 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
 fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
   // TOML 1.1 allows an inline table to be written over several lines. The author chose that, so
   // keep it; a table written on one line is never expanded, which would produce syntax a 1.0 parser
-  // rejects. A table holding a comment is multi-line whatever follows its brace, since a comment
-  // runs to the end of its line, and generating it on one line would drop the comment.
+  // rejects. A table holding a comment of its own is multi-line whatever follows its brace, since a
+  // comment runs to the end of its line, and generating it on one line would drop the comment. A
+  // comment inside one of its values is not the table's, and expanding the table over it would turn
+  // a 1.0 document into a 1.1 one.
   //
   // Nothing within a table that has to stay on one line may break, so a table nested in one is
   // generated on a single line however the author wrote it.
-  if !context.is_in_single_line_table() && (table.multi_line_in_source || table.contains_comment()) {
+  if !context.is_in_single_line_table() && (table.multi_line_in_source || table.has_own_comment()) {
     return gen_multi_line_inline_table(table, context);
   }
 
@@ -394,7 +402,7 @@ fn gen_comment_text(comment: &Comment, context: &mut Context) -> PrintItems {
   }
 
   let info = get_comment_text_info(comment.text);
-  let after_hash_text = comment.text[info.start_text_index..].trim_end();
+  let after_hash_text = comment.text[info.start_text_index..].trim_end_matches([' ', '\t']);
   // Nothing is inserted when the text after the hashes already begins with whitespace, or when
   // there is no text at all, so rebuilding would only reproduce the source text. Almost every
   // comment in a real file takes this path, and rendering the slice saves building the copy.

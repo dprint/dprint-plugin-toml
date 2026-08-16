@@ -150,22 +150,6 @@ impl Value<'_> {
       ValueKind::InlineTable(table) => table.entries.iter().any(|e| e.value.contains_multi_line_string()),
     }
   }
-
-  /// Whether a comment appears anywhere within this value.
-  pub fn contains_comment(&self) -> bool {
-    match &self.kind {
-      ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => false,
-      ValueKind::Array(array) => {
-        array.comment_after_open.is_some()
-          || !array.comments_before_close.is_empty()
-          || array
-            .values
-            .iter()
-            .any(|value| value.trailing_comment.is_some() || !value.leading_comments.is_empty() || value.value.contains_comment())
-      }
-      ValueKind::InlineTable(table) => table.contains_comment(),
-    }
-  }
 }
 
 #[derive(Debug, Clone)]
@@ -229,17 +213,19 @@ pub struct InlineTable<'a> {
 }
 
 impl InlineTable<'_> {
-  /// Whether a comment appears anywhere within this table, including inside its values.
+  /// Whether a comment sits directly within this table's braces rather than inside one of its
+  /// values.
   ///
-  /// A comment runs to the end of its line, so one can only sit inside braces that already hold a
-  /// newline. That makes such a table multi-line in the source even when `multi_line_in_source` is
-  /// false, since that field records only what directly follows the opening brace.
-  pub fn contains_comment(&self) -> bool {
+  /// Only such a comment forces the table itself onto several lines. A comment inside a value —
+  /// within a nested array, say — sits among that value's own lines, which TOML 1.0 already permits
+  /// between the braces: "No newlines are allowed between the curly braces unless they are valid
+  /// within a value."
+  pub fn has_own_comment(&self) -> bool {
     self.comment_after_open.is_some()
       || !self.comments_before_close.is_empty()
       || self
         .entries
         .iter()
-        .any(|entry| entry.trailing_comment.is_some() || !entry.leading_comments.is_empty() || entry.value.contains_comment())
+        .any(|entry| entry.trailing_comment.is_some() || !entry.leading_comments.is_empty())
   }
 }

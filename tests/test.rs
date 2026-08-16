@@ -27,6 +27,15 @@ fn should_reject_deeply_nested_collections() {
   assert!(format_text(&PathBuf::from("file.toml"), &nested, &config).is_ok());
 }
 
+/// A comment may legitimately end in whitespace that isn't a space or a tab, and `trim_end` would
+/// take it.
+#[test]
+fn should_keep_unicode_whitespace_in_a_comment() {
+  let config = ConfigurationBuilder::new().build();
+  let text = format_text(&PathBuf::from("file.toml"), "a = 1 # hi\u{a0}\n", &config).unwrap();
+  assert_eq!(text, None, "the comment should have been left exactly as written");
+}
+
 #[test]
 fn should_report_parse_errors() {
   let config = ConfigurationBuilder::new().build();
