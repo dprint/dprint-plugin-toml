@@ -59,3 +59,40 @@ full = 1979-05-27T07:32:00Z
 dt = 2010-02-03 14:15
 t = 14:15
 full = 1979-05-27T07:32:00Z
+
+== should keep comments in an inline table whose brace is followed by a value ==
+a = { b = 1, # c
+c = 2 }
+d = { e = 1,
+  # lead
+  f = 2 }
+g = { h = 1,
+  # close
+}
+
+[expect]
+a = {
+  b = 1, # c
+  c = 2,
+}
+d = {
+  e = 1,
+  # lead
+  f = 2,
+}
+g = {
+  h = 1,
+  # close
+}
+
+== should keep a table nested in a single line table on one line ==
+a = { b = {
+  c = 1
+} }
+d = { e = [{
+  f = 1
+}] }
+
+[expect]
+a = { b = { c = 1 } }
+d = { e = [{ f = 1 }] }

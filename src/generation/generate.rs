@@ -159,10 +159,14 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
 // ---- inline tables ----
 
 fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
-  if table.multi_line_in_source {
-    // TOML 1.1 allows an inline table to be written over several lines. The author chose that, so
-    // keep it; a table written on one line is never expanded, which would produce syntax a 1.0
-    // parser rejects.
+  // TOML 1.1 allows an inline table to be written over several lines. The author chose that, so
+  // keep it; a table written on one line is never expanded, which would produce syntax a 1.0 parser
+  // rejects. A table holding a comment is multi-line whatever follows its brace, since a comment
+  // runs to the end of its line, and generating it on one line would drop the comment.
+  //
+  // Nothing within a table that has to stay on one line may break, so a table nested in one is
+  // generated on a single line however the author wrote it.
+  if !context.is_in_single_line_table() && (table.multi_line_in_source || table.contains_comment()) {
     return gen_multi_line_inline_table(table, context);
   }
 
@@ -248,9 +252,6 @@ struct SeparatedItem<'a> {
   /// Whether a blank line sits between the last leading comment and the item itself.
   blank_line_before: bool,
   trailing_comment: Option<&'a Comment>,
-  /// Whether this item may sit inline on the same line as the opening bracket when the group is
-  /// broken up, which reads well for an inline table but not for other values.
-  allow_inline_multi_line: bool,
   /// Whether a blank line separates this whole item, comments included, from the one before it.
   blank_line_before_item: bool,
   entry: SeparatedItemValue<'a>,
@@ -267,7 +268,6 @@ impl<'a> From<&'a ArrayValue> for SeparatedItem<'a> {
       leading_comments: &value.leading_comments,
       blank_line_before: value.blank_line_before,
       trailing_comment: value.trailing_comment.as_ref(),
-      allow_inline_multi_line: matches!(value.value.kind, ValueKind::InlineTable(_)),
       blank_line_before_item: blank_line_before_item(&value.leading_comments, value.blank_line_before),
       entry: SeparatedItemValue::Value(&value.value),
     }
@@ -280,7 +280,6 @@ impl<'a> From<&'a Entry> for SeparatedItem<'a> {
       leading_comments: &entry.leading_comments,
       blank_line_before: entry.blank_line_before,
       trailing_comment: entry.trailing_comment.as_ref(),
-      allow_inline_multi_line: matches!(entry.value.kind, ValueKind::InlineTable(_)),
       blank_line_before_item: blank_line_before_item(&entry.leading_comments, entry.blank_line_before),
       entry: SeparatedItemValue::Entry(entry),
     }
@@ -320,11 +319,11 @@ fn gen_separated(items: Vec<SeparatedItem>, force_use_new_lines: bool, context: 
         } else {
           ",".into()
         };
-        let allow_inline_multi_line = item.allow_inline_multi_line;
         generated.push(ir_helpers::GeneratedValue {
           items: ir_helpers::new_line_group(gen_separated_item(item, generated_comma, context)),
           lines_span,
-          allow_inline_multi_line,
+          // a value spanning several lines always breaks its group up, wherever it sits in it
+          allow_inline_multi_line: false,
           allow_inline_single_line: false,
         });
       }

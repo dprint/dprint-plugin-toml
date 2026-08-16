@@ -4,19 +4,6 @@
 // verbatim, and comments and blank lines are attached to the construct they belong to rather than
 // being recovered by walking siblings. Anything not represented here is insignificant whitespace.
 
-/// A byte-index range into the original text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-  pub start: usize,
-  pub end: usize,
-}
-
-impl Span {
-  pub fn new(start: usize, end: usize) -> Self {
-    Span { start, end }
-  }
-}
-
 /// A comment, from the `#` up to (but not including) the end of the line.
 #[derive(Debug, Clone)]
 pub struct Comment {
@@ -167,4 +154,37 @@ pub struct InlineTable {
   pub comments_before_close: Vec<Comment>,
   /// Whether the author wrote the table over multiple lines, which TOML 1.1 permits.
   pub multi_line_in_source: bool,
+}
+
+impl InlineTable {
+  /// Whether a comment appears anywhere within this table, including inside its values.
+  ///
+  /// A comment runs to the end of its line, so one can only sit inside braces that already hold a
+  /// newline. Such a table is multi-line in the source whatever follows its opening brace.
+  pub fn contains_comment(&self) -> bool {
+    self.comment_after_open.is_some()
+      || !self.comments_before_close.is_empty()
+      || self
+        .entries
+        .iter()
+        .any(|entry| entry.trailing_comment.is_some() || !entry.leading_comments.is_empty() || entry.value.contains_comment())
+  }
+}
+
+impl Value {
+  /// Whether a comment appears anywhere within this value.
+  pub fn contains_comment(&self) -> bool {
+    match &self.kind {
+      ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => false,
+      ValueKind::Array(array) => {
+        array.comment_after_open.is_some()
+          || !array.comments_before_close.is_empty()
+          || array
+            .values
+            .iter()
+            .any(|value| value.trailing_comment.is_some() || !value.leading_comments.is_empty() || value.value.contains_comment())
+      }
+      ValueKind::InlineTable(table) => table.contains_comment(),
+    }
+  }
 }

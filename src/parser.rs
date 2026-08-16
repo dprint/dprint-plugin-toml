@@ -10,6 +10,19 @@
 
 use crate::ast::*;
 
+/// A byte-index range into the text being parsed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+  pub start: usize,
+  pub end: usize,
+}
+
+impl Span {
+  pub fn new(start: usize, end: usize) -> Self {
+    Span { start, end }
+  }
+}
+
 /// A syntax error, with the span of the offending text.
 #[derive(Debug, Clone)]
 pub struct SyntaxError {
@@ -427,7 +440,10 @@ impl<'a> Parser<'a> {
       match self.peek() {
         None => return self.error("unterminated array", Span::new(start, self.pos)),
         Some('\n') | Some('\r') => {
-          self.try_skip_newline();
+          // a lone carriage return isn't a newline, and leaving it would spin here forever
+          if !self.try_skip_newline() {
+            return self.error_here("expected a line feed after the carriage return");
+          }
           newlines += 1;
           continue;
         }
@@ -439,9 +455,11 @@ impl<'a> Parser<'a> {
           continue;
         }
         Some(',') if !separated => {
-          // a comma is allowed to trail onto a later line than the value it follows
+          // a comma is allowed to trail onto a later line than the value it follows. The
+          // newlines it sat behind belong to that value's line rather than to whatever comes next.
           self.bump();
           separated = true;
+          newlines = 0;
           if let Some(comment) = self.parse_trailing_comment() {
             match values.last_mut() {
               Some(value) if value.trailing_comment.is_none() => value.trailing_comment = Some(comment),
@@ -513,8 +531,11 @@ impl<'a> Parser<'a> {
       match self.peek() {
         None => return self.error("unterminated inline table", Span::new(start, self.pos)),
         Some('\n') | Some('\r') => {
-          // TOML 1.1 permits newlines within an inline table
-          self.try_skip_newline();
+          // TOML 1.1 permits newlines within an inline table. A lone carriage return isn't one,
+          // and leaving it would spin here forever.
+          if !self.try_skip_newline() {
+            return self.error_here("expected a line feed after the carriage return");
+          }
           newlines += 1;
           continue;
         }
@@ -527,6 +548,7 @@ impl<'a> Parser<'a> {
         Some(',') if !separated => {
           self.bump();
           separated = true;
+          newlines = 0;
           if let Some(comment) = self.parse_trailing_comment() {
             match entries.last_mut() {
               Some(entry) if entry.trailing_comment.is_none() => entry.trailing_comment = Some(comment),
