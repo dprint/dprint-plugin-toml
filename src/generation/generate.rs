@@ -234,6 +234,60 @@ fn requoted_string(text: &str, style: QuoteStyle) -> Option<String> {
 // ---- arrays ----
 
 fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
+  if context.are_arrays_collapsed() {
+    // An array laid out without the line width is collapsed onto its table's line, so its values
+    // are separated by hard spaces rather than by anything that could break. Its comments are
+    // still written: a comment ends its own line whatever we do, and those newlines sit within a
+    // value, which TOML 1.0 allows between the braces.
+    return gen_surrounded(
+      SurroundedParams {
+        open: sc!("["),
+        close: sc!("]"),
+        comment_after_open: array.comment_after_open.as_ref(),
+        comments_before_close: &array.comments_before_close,
+      },
+      |context| {
+        let mut items = PrintItems::new();
+        // Each side is padded on its own, and only when nothing beside it already writes a space:
+        // a comment is generated with a leading space of its own, and one against a bracket would
+        // otherwise be pushed out to two.
+        let pad = context.config.array_space_surrounding_brackets && !array.values.is_empty();
+        let pad_open = pad && array.comment_after_open.is_none() && array.values[0].leading_comments.is_empty();
+        let pad_close = pad && array.comments_before_close.is_empty() && array.values[array.values.len() - 1].trailing_comment.is_none();
+        if pad_open {
+          items.push_sc(sc!(" "));
+        }
+        for (i, value) in array.values.iter().enumerate() {
+          // Space away from the previous value, unless its comment already ended that line, or
+          // this value's own comment is about to write one. Writing both leaves a double space
+          // that reformatting would then collapse, since the comment reparses as the previous
+          // value's trailing one.
+          if i > 0 && array.values[i - 1].trailing_comment.is_none() && value.leading_comments.is_empty() {
+            items.push_sc(sc!(" "));
+          }
+          for comment in &value.leading_comments {
+            items.extend(gen_comment(comment, context));
+            items.push_signal(Signal::NewLine);
+          }
+          items.extend(gen_value(&value.value, context));
+          // the comma goes before the comment rather than after it, so that a comment ending its
+          // line doesn't leave the next value's comma leading the line beneath
+          if i + 1 < array.values.len() {
+            items.push_sc(sc!(","));
+          }
+          if let Some(comment) = &value.trailing_comment {
+            items.extend(gen_comment(comment, context));
+          }
+        }
+        if pad_close {
+          items.push_sc(sc!(" "));
+        }
+        items
+      },
+      context,
+    );
+  }
+
   let force_use_new_lines = array.force_use_new_lines(context.config);
   let space_within_single_line = context.config.array_space_surrounding_brackets;
   gen_surrounded(
@@ -271,7 +325,7 @@ fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
 
   let pad = context.config.inline_table_space_surrounding_braces && !table.entries.is_empty();
   let mut items = PrintItems::new();
-  context.with_single_line_table(|context| {
+  context.with_single_line_table(table.contains_multi_line_string(), |context| {
     items.push_sc(sc!("{"));
     for (i, entry) in table.entries.iter().enumerate() {
       if i > 0 {
@@ -368,30 +422,30 @@ enum SeparatedItemValue<'a> {
 /// Whether a value is written over several lines depends on the configuration, so this stands in
 /// for the `From` conversion the item would otherwise be built by.
 trait IntoSeparatedItem<'a> {
-  fn into_separated_item(self, config: &Configuration, within_single_line_table: bool) -> SeparatedItem<'a>;
+  fn into_separated_item(self, config: &Configuration, line_context: LineContext) -> SeparatedItem<'a>;
 }
 
 impl<'a> IntoSeparatedItem<'a> for &'a ArrayValue<'a> {
-  fn into_separated_item(self, config: &Configuration, within_single_line_table: bool) -> SeparatedItem<'a> {
+  fn into_separated_item(self, config: &Configuration, line_context: LineContext) -> SeparatedItem<'a> {
     SeparatedItem {
       leading_comments: &self.leading_comments,
       blank_line_before: self.blank_line_before,
       trailing_comment: self.trailing_comment.as_ref(),
       blank_line_before_item: blank_line_before_item(&self.leading_comments, self.blank_line_before),
-      is_known_multi_line: self.value.is_known_multi_line(config, within_single_line_table),
+      is_known_multi_line: self.value.is_known_multi_line(config, line_context),
       entry: SeparatedItemValue::Value(&self.value),
     }
   }
 }
 
 impl<'a> IntoSeparatedItem<'a> for &'a Entry<'a> {
-  fn into_separated_item(self, config: &Configuration, within_single_line_table: bool) -> SeparatedItem<'a> {
+  fn into_separated_item(self, config: &Configuration, line_context: LineContext) -> SeparatedItem<'a> {
     SeparatedItem {
       leading_comments: &self.leading_comments,
       blank_line_before: self.blank_line_before,
       trailing_comment: self.trailing_comment.as_ref(),
       blank_line_before_item: blank_line_before_item(&self.leading_comments, self.blank_line_before),
-      is_known_multi_line: self.value.is_known_multi_line(config, within_single_line_table),
+      is_known_multi_line: self.value.is_known_multi_line(config, line_context),
       entry: SeparatedItemValue::Entry(self),
     }
   }
@@ -413,7 +467,7 @@ where
 {
   let indent_width = context.config.indent_width;
   let trailing_commas = context.config.trailing_commas;
-  let within_single_line_table = context.is_in_single_line_table();
+  let line_context = context.line_context();
   ir_helpers::gen_separated_values(
     |is_multi_line_ref| {
       let count = items.len();
@@ -422,11 +476,7 @@ where
       // author asked for one, and the item may since have been moved by the Cargo.toml sorting,
       // which would leave any position taken from the source pointing at the wrong line.
       let mut line = 0;
-      for (i, item) in items
-        .iter()
-        .map(|item| item.into_separated_item(context.config, within_single_line_table))
-        .enumerate()
-      {
+      for (i, item) in items.iter().map(|item| item.into_separated_item(context.config, line_context)).enumerate() {
         if i > 0 {
           line += if item.blank_line_before_item { 2 } else { 1 };
         }

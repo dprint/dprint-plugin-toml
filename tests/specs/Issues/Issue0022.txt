@@ -92,3 +92,13 @@ a = { b = [
   1,
   2,
 ] }
+
+== should keep an array on its table's line when the table holds a multi-line string ==
+a = { s = '''
+multi
+line''', f = ["aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "dddddddddd", "eeeeeeeeee"] }
+
+[expect]
+a = { s = '''
+multi
+line''', f = ["aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "dddddddddd", "eeeeeeeeee"] }

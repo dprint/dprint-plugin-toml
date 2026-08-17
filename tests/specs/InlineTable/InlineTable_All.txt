@@ -47,7 +47,7 @@ c = { d = '''
 literal
 lines''', e = 1 }
 
-== should break up an array in an inline table that has a multi-line string ==
+== should not break up an array in an inline table that has a multi-line string ==
 a = { s = """
 multi
 line""", f = ["feature1", "feature2", "feature3", "feature4"] }
@@ -55,9 +55,4 @@ line""", f = ["feature1", "feature2", "feature3", "feature4"] }
 [expect]
 a = { s = """
 multi
-line""", f = [
-  "feature1",
-  "feature2",
-  "feature3",
-  "feature4",
-] }
+line""", f = ["feature1", "feature2", "feature3", "feature4"] }
