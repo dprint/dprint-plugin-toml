@@ -234,60 +234,6 @@ fn requoted_string(text: &str, style: QuoteStyle) -> Option<String> {
 // ---- arrays ----
 
 fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
-  if context.is_in_single_line_table() {
-    // An array within a table that has to stay on one line is collapsed onto that line, so its
-    // values are separated by hard spaces rather than by anything that could break. Its comments
-    // are still written: a comment ends its own line whatever we do, and those newlines sit within
-    // a value, which TOML 1.0 allows between the braces.
-    return gen_surrounded(
-      SurroundedParams {
-        open: sc!("["),
-        close: sc!("]"),
-        comment_after_open: array.comment_after_open.as_ref(),
-        comments_before_close: &array.comments_before_close,
-      },
-      |context| {
-        let mut items = PrintItems::new();
-        // Each side is padded on its own, and only when nothing beside it already writes a space:
-        // a comment is generated with a leading space of its own, and one against a bracket would
-        // otherwise be pushed out to two.
-        let pad = context.config.array_space_surrounding_brackets && !array.values.is_empty();
-        let pad_open = pad && array.comment_after_open.is_none() && array.values[0].leading_comments.is_empty();
-        let pad_close = pad && array.comments_before_close.is_empty() && array.values[array.values.len() - 1].trailing_comment.is_none();
-        if pad_open {
-          items.push_sc(sc!(" "));
-        }
-        for (i, value) in array.values.iter().enumerate() {
-          // Space away from the previous value, unless its comment already ended that line, or
-          // this value's own comment is about to write one. Writing both leaves a double space
-          // that reformatting would then collapse, since the comment reparses as the previous
-          // value's trailing one.
-          if i > 0 && array.values[i - 1].trailing_comment.is_none() && value.leading_comments.is_empty() {
-            items.push_sc(sc!(" "));
-          }
-          for comment in &value.leading_comments {
-            items.extend(gen_comment(comment, context));
-            items.push_signal(Signal::NewLine);
-          }
-          items.extend(gen_value(&value.value, context));
-          // the comma goes before the comment rather than after it, so that a comment ending its
-          // line doesn't leave the next value's comma leading the line beneath
-          if i + 1 < array.values.len() {
-            items.push_sc(sc!(","));
-          }
-          if let Some(comment) = &value.trailing_comment {
-            items.extend(gen_comment(comment, context));
-          }
-        }
-        if pad_close {
-          items.push_sc(sc!(" "));
-        }
-        items
-      },
-      context,
-    );
-  }
-
   let force_use_new_lines = array.force_use_new_lines(context.config);
   let space_within_single_line = context.config.array_space_surrounding_brackets;
   gen_surrounded(
@@ -345,15 +291,12 @@ fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
   // > table onto multiples lines. If you find yourself gripped with this desire, it means you should be using
   // > standard tables.
   //
-  // Note the "unless they are valid within a value" carve out. The newlines of a multi-line string
-  // are part of its value, and the printer discards every newline signal within a force-no-new-lines
-  // scope, so a table holding one has to be generated without the scope. Everything within is
-  // separated by hard spaces, so dropping it doesn't let anything wrap.
-  if table.entries.iter().any(|entry| entry.value.contains_multi_line_string()) {
-    items
-  } else {
-    ir_helpers::with_no_new_lines(items)
-  }
+  // Note the "unless they are valid within a value" carve out: an array between the braces may be
+  // written over several lines, and so may a multi-line string, because those newlines belong to
+  // the value rather than to the table. Nothing at the table's own level can break -- its braces,
+  // commas and equals signs are all hard text, and a table nested within it is kept on one line --
+  // so the table stays on its line whatever a value inside it does.
+  items
 }
 
 fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
@@ -425,30 +368,30 @@ enum SeparatedItemValue<'a> {
 /// Whether a value is written over several lines depends on the configuration, so this stands in
 /// for the `From` conversion the item would otherwise be built by.
 trait IntoSeparatedItem<'a> {
-  fn into_separated_item(self, config: &Configuration) -> SeparatedItem<'a>;
+  fn into_separated_item(self, config: &Configuration, within_single_line_table: bool) -> SeparatedItem<'a>;
 }
 
 impl<'a> IntoSeparatedItem<'a> for &'a ArrayValue<'a> {
-  fn into_separated_item(self, config: &Configuration) -> SeparatedItem<'a> {
+  fn into_separated_item(self, config: &Configuration, within_single_line_table: bool) -> SeparatedItem<'a> {
     SeparatedItem {
       leading_comments: &self.leading_comments,
       blank_line_before: self.blank_line_before,
       trailing_comment: self.trailing_comment.as_ref(),
       blank_line_before_item: blank_line_before_item(&self.leading_comments, self.blank_line_before),
-      is_known_multi_line: self.value.is_known_multi_line(config),
+      is_known_multi_line: self.value.is_known_multi_line(config, within_single_line_table),
       entry: SeparatedItemValue::Value(&self.value),
     }
   }
 }
 
 impl<'a> IntoSeparatedItem<'a> for &'a Entry<'a> {
-  fn into_separated_item(self, config: &Configuration) -> SeparatedItem<'a> {
+  fn into_separated_item(self, config: &Configuration, within_single_line_table: bool) -> SeparatedItem<'a> {
     SeparatedItem {
       leading_comments: &self.leading_comments,
       blank_line_before: self.blank_line_before,
       trailing_comment: self.trailing_comment.as_ref(),
       blank_line_before_item: blank_line_before_item(&self.leading_comments, self.blank_line_before),
-      is_known_multi_line: self.value.is_known_multi_line(config),
+      is_known_multi_line: self.value.is_known_multi_line(config, within_single_line_table),
       entry: SeparatedItemValue::Entry(self),
     }
   }
@@ -470,6 +413,7 @@ where
 {
   let indent_width = context.config.indent_width;
   let trailing_commas = context.config.trailing_commas;
+  let within_single_line_table = context.is_in_single_line_table();
   ir_helpers::gen_separated_values(
     |is_multi_line_ref| {
       let count = items.len();
@@ -478,7 +422,11 @@ where
       // author asked for one, and the item may since have been moved by the Cargo.toml sorting,
       // which would leave any position taken from the source pointing at the wrong line.
       let mut line = 0;
-      for (i, item) in items.iter().map(|item| item.into_separated_item(context.config)).enumerate() {
+      for (i, item) in items
+        .iter()
+        .map(|item| item.into_separated_item(context.config, within_single_line_table))
+        .enumerate()
+      {
         if i > 0 {
           line += if item.blank_line_before_item { 2 } else { 1 };
         }

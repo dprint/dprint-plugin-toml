@@ -166,17 +166,6 @@ pub struct Value<'a> {
 }
 
 impl Value<'_> {
-  /// Whether this value's own text spans more than one line, which happens only for a multi-line
-  /// string. Those newlines are part of the value and can never be removed.
-  pub fn contains_multi_line_string(&self) -> bool {
-    match &self.kind {
-      ValueKind::MultiLineString(_) => true,
-      ValueKind::Scalar(_) => false,
-      ValueKind::Array(array) => array.values.iter().any(|v| v.value.contains_multi_line_string()),
-      ValueKind::InlineTable(table) => table.entries.iter().any(|e| e.value.contains_multi_line_string()),
-    }
-  }
-
   /// Whether this value is written over more than one line however it is formatted.
   ///
   /// Telling a group this in advance saves it printing its values on the assumption that they fit
@@ -184,31 +173,25 @@ impl Value<'_> {
   /// otherwise repeat at every level. It has to be certain, so an inline table the author wrote on
   /// one line counts for nothing within it except a string, whose own newlines are kept wherever it
   /// appears.
-  pub fn is_known_multi_line(&self, config: &Configuration) -> bool {
+  /// `within_single_line_table` is whether an enclosing inline table is written on a single line,
+  /// which keeps any table within it -- including one reached through an array -- on that line too.
+  pub fn is_known_multi_line(&self, config: &Configuration, within_single_line_table: bool) -> bool {
     match &self.kind {
       // a triple quoted string is only written over several lines if its contents are
       ValueKind::MultiLineString(text) => text.contains('\n'),
       ValueKind::Scalar(_) => false,
-      ValueKind::Array(array) => array.force_use_new_lines(config) || array.values.iter().any(|value| value.value.is_known_multi_line(config)),
-      ValueKind::InlineTable(table) => {
-        if table.force_use_new_lines(config) {
-          true
-        } else {
-          // the table is printed on one line, collapsing any collection within it, so only a string
-          // that spans lines is left to break it
-          table.entries.iter().any(|entry| entry.value.contains_string_spanning_lines())
-        }
+      // an array may be broken up wherever it sits, since its newlines are within a value
+      ValueKind::Array(array) => {
+        array.force_use_new_lines(config)
+          || array
+            .values
+            .iter()
+            .any(|value| value.value.is_known_multi_line(config, within_single_line_table))
       }
-    }
-  }
-
-  /// Whether a string whose contents span lines appears anywhere within this value.
-  fn contains_string_spanning_lines(&self) -> bool {
-    match &self.kind {
-      ValueKind::MultiLineString(text) => text.contains('\n'),
-      ValueKind::Scalar(_) => false,
-      ValueKind::Array(array) => array.values.iter().any(|value| value.value.contains_string_spanning_lines()),
-      ValueKind::InlineTable(table) => table.entries.iter().any(|entry| entry.value.contains_string_spanning_lines()),
+      ValueKind::InlineTable(table) => {
+        let broken_up = !within_single_line_table && table.force_use_new_lines(config);
+        broken_up || table.entries.iter().any(|entry| entry.value.is_known_multi_line(config, !broken_up))
+      }
     }
   }
 

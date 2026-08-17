@@ -38,13 +38,15 @@ fn sort_root_keys(root: &mut Root) {
 }
 
 /// `within_single_line` is whether an enclosing inline table is written on a single line, which
-/// collapses everything inside it onto that line however it was written.
+/// keeps any table nested in it on that line too. An array is not kept there -- its newlines sit
+/// within a value, which the TOML spec allows between the braces.
 fn sort_within_value(value: &mut Value, config: &Configuration, within_single_line: bool) {
   match &mut value.kind {
     ValueKind::Array(array) => {
-      let single_line = within_single_line || !array.force_use_new_lines(config);
+      let single_line = !array.force_use_new_lines(config);
       for item in &mut array.values {
-        sort_within_value(&mut item.value, config, single_line);
+        // a table reached through an array is still kept on the enclosing table's line
+        sort_within_value(&mut item.value, config, within_single_line);
       }
       // Only the text of a value decides where it sorts, so an array holding one that has no text
       // of its own — another array, or an inline table — is left alone rather than being

@@ -2,8 +2,8 @@ use crate::configuration::Configuration;
 
 pub struct Context<'a> {
   pub config: &'a Configuration,
-  /// How many single-line inline tables enclose whatever is being generated. Nothing within one
-  /// may break onto another line.
+  /// How many single-line inline tables enclose whatever is being generated. A table within one is
+  /// kept on a single line too, since a newline between its braces would not be within a value.
   single_line_table_depth: usize,
 }
 

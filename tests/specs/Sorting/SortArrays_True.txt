@@ -47,6 +47,11 @@ a = [
 a = [2,
 
 1]
+
+[expect]
+a = [1, 2]
+
+== should honour the runs of an array in an inline table that stays expanded ==
 b = { c = [
   "d",
   "c",
@@ -56,5 +61,10 @@ b = { c = [
 ] }
 
 [expect]
-a = [1, 2]
-b = { c = ["a", "b", "c", "d"] }
+b = { c = [
+  "c",
+  "d",
+
+  "a",
+  "b",
+] }

@@ -1,0 +1,94 @@
+~~ lineWidth: 80 ~~
+== should break up a long array inside an inline table ==
+[package]
+name = "playground"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sqlx = { version = "0.8.2", default-features = false, features = ["chrono", "macros", "postgres", "runtime-tokio-rustls", "uuid"] }
+
+[expect]
+[package]
+name = "playground"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sqlx = { version = "0.8.2", default-features = false, features = [
+  "chrono",
+  "macros",
+  "postgres",
+  "runtime-tokio-rustls",
+  "uuid",
+] }
+
+== should leave an inline table that fits on one line ==
+a = { version = "0.8.2", features = ["chrono"] }
+
+[expect]
+a = { version = "0.8.2", features = ["chrono"] }
+
+== should break the array but keep both tables' braces on their line ==
+a = { b = { version = "0.8.2", features = ["one", "two", "three", "four", "five"] } }
+
+[expect]
+a = { b = { version = "0.8.2", features = [
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+] } }
+
+== should keep a table nested in a single-line table on that line ==
+a = { b = {
+  c = 1
+} }
+
+[expect]
+a = { b = { c = 1 } }
+
+== should break only the array when a nested table follows it ==
+a = { features = ["one", "two", "three", "four", "five", "six", "seven"], b = { c = 1 } }
+
+[expect]
+a = { features = [
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+], b = { c = 1 } }
+
+== should break an array nested inside an array in an inline table ==
+a = { b = [["one", "two", "three"], ["four", "five", "six"], ["seven", "eight"]] }
+
+[expect]
+a = { b = [
+  ["one", "two", "three"],
+  ["four", "five", "six"],
+  ["seven", "eight"],
+] }
+
+== should never break an inline table that holds no array ==
+a = { version = "0.1.0", default-features = false, optional = true, package = "renamed" }
+b = { c = { d = { e = "a table nested in a table never breaks however long the line" } } }
+
+[expect]
+a = { version = "0.1.0", default-features = false, optional = true, package = "renamed" }
+b = { c = { d = { e = "a table nested in a table never breaks however long the line" } } }
+
+== should keep an array the author wrote over several lines expanded ==
+a = { b = [
+  1,
+  2,
+] }
+
+[expect]
+a = { b = [
+  1,
+  2,
+] }

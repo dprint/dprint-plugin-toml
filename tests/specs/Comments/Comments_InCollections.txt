@@ -135,8 +135,10 @@ a = { b = [
 ] }
 
 [expect]
-a = { b = [1, # one
-2] }
+a = { b = [
+  1, # one
+  2,
+] }
 
 == should keep a comment before the closing bracket of an array in a single-line table ==
 a = { b = [
@@ -145,5 +147,7 @@ a = { b = [
 ] }
 
 [expect]
-a = { b = [1 # done
+a = { b = [
+  1,
+  # done
 ] }

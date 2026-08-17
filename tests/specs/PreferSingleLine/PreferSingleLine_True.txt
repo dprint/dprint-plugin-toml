@@ -39,3 +39,12 @@ a = [
   1,
   2,
 ]
+
+== should collapse an array the author expanded inside an inline table ==
+a = { b = [
+  1,
+  2,
+] }
+
+[expect]
+a = { b = [1, 2] }
