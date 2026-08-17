@@ -45,7 +45,8 @@ fn gen_root(root: &Root, context: &mut Context) -> PrintItems {
 ///
 /// A table header's level is how many of the headers above it name one of its ancestors, so
 /// `[a.b]` beneath `[a]` sits one level in while `[a.b]` beneath nothing at all sits at the
-/// margin. A table's entries follow its header, one level further in when entries are indented.
+/// margin. A table's body -- its entries and the comments among them -- follows its header, one
+/// level further in when entries are indented.
 fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
   let mut levels = vec![0u32; root.items.len()];
   // the level a comment falls back to when it closes off its section rather than introducing the
@@ -53,9 +54,9 @@ fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
   let mut section_levels = vec![0u32; root.items.len()];
   // the headers enclosing the item being looked at, each naming an ancestor of the next
   let mut open_tables: Vec<&Key> = Vec::new();
-  let mut table_level = 0;
-  let mut entry_level = 0;
-  let mut header_indent = None;
+  // the whole body of a section shares one level, so it is worked out at the header rather than
+  // an item at a time -- a comment sitting above the section's first entry needs it too
+  let mut body_level = 0;
 
   for (i, item) in root.items.iter().enumerate() {
     match item {
@@ -65,7 +66,7 @@ fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
         }
         let depth = open_tables.len() as u32;
         open_tables.push(&header.key);
-        table_level = match config.indent_tables {
+        let table_level = match config.indent_tables {
           IndentKind::Always => depth,
           IndentKind::Never => 0,
           IndentKind::Maintain => {
@@ -76,24 +77,15 @@ fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
             }
           }
         };
-        header_indent = Some(header.indent_in_source);
-        entry_level = table_level + u32::from(config.indent_entries == IndentKind::Always);
+        body_level = table_level + section_body_extra_indent(&root.items[i + 1..], header, config);
         levels[i] = table_level;
       }
-      RootItem::Entry(entry) => {
-        // an entry above the first table header belongs to no table, so there is nothing for it
-        // to be indented beneath
-        let extra = match (header_indent, config.indent_entries) {
-          (None, _) | (Some(_), IndentKind::Never) => 0,
-          (Some(_), IndentKind::Always) => 1,
-          (Some(indent), IndentKind::Maintain) => u32::from(entry.indent_in_source > indent),
-        };
-        entry_level = table_level + extra;
-        levels[i] = entry_level;
-      }
+      // an entry above the first table header belongs to no table, so there is nothing for it to
+      // be indented beneath, and `body_level` is still zero
+      RootItem::Entry(_) => levels[i] = body_level,
       RootItem::Comment(_) => {}
     }
-    section_levels[i] = entry_level;
+    section_levels[i] = body_level;
   }
 
   // A comment is written at the indent of the item it introduces, which is only known once that
@@ -111,6 +103,36 @@ fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
   }
 
   levels
+}
+
+/// How many levels in from its header a section's body is written, where `rest` is everything
+/// after the header.
+///
+/// Under `maintain` the section's first entry decides for the whole body, rather than each entry
+/// deciding for itself: a table is indented or it isn't, and a comment written above that first
+/// entry has to be given the same answer before the entry has been reached. A section holding
+/// nothing but comments has only those to go on.
+fn section_body_extra_indent(rest: &[RootItem], header: &TableHeader, config: &Configuration) -> u32 {
+  match config.indent_entries {
+    IndentKind::Never => 0,
+    IndentKind::Always => 1,
+    IndentKind::Maintain => {
+      let section = rest.iter().take_while(|item| !item.is_table_header());
+      let indent = section
+        .clone()
+        .find_map(|item| match item {
+          RootItem::Entry(entry) => Some(entry.indent_in_source),
+          _ => None,
+        })
+        .or_else(|| {
+          section.into_iter().find_map(|item| match item {
+            RootItem::Comment(comment) => Some(comment.indent_in_source),
+            _ => None,
+          })
+        });
+      u32::from(indent.is_some_and(|indent| indent > header.indent_in_source))
+    }
+  }
 }
 
 /// A blank line is kept everywhere except directly beneath a table header, where it only separates
@@ -226,14 +248,21 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
       },
       |context| {
         let mut items = PrintItems::new();
-        // padding is only written when nothing else is going to end the line first
-        let pad = context.config.array_space_surrounding_brackets && !array.values.is_empty() && array.comment_after_open.is_none();
-        if pad {
+        // Each side is padded on its own, and only when nothing beside it already writes a space:
+        // a comment is generated with a leading space of its own, and one against a bracket would
+        // otherwise be pushed out to two.
+        let pad = context.config.array_space_surrounding_brackets && !array.values.is_empty();
+        let pad_open = pad && array.comment_after_open.is_none() && array.values[0].leading_comments.is_empty();
+        let pad_close = pad && array.comments_before_close.is_empty() && array.values[array.values.len() - 1].trailing_comment.is_none();
+        if pad_open {
           items.push_sc(sc!(" "));
         }
         for (i, value) in array.values.iter().enumerate() {
-          // space away from the previous value, unless its comment already ended that line
-          if i > 0 && array.values[i - 1].trailing_comment.is_none() {
+          // Space away from the previous value, unless its comment already ended that line, or
+          // this value's own comment is about to write one. Writing both leaves a double space
+          // that reformatting would then collapse, since the comment reparses as the previous
+          // value's trailing one.
+          if i > 0 && array.values[i - 1].trailing_comment.is_none() && value.leading_comments.is_empty() {
             items.push_sc(sc!(" "));
           }
           for comment in &value.leading_comments {
@@ -250,7 +279,7 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
             items.extend(gen_comment(comment, context));
           }
         }
-        if pad && array.values.last().is_some_and(|value| value.trailing_comment.is_none()) {
+        if pad_close {
           items.push_sc(sc!(" "));
         }
         items

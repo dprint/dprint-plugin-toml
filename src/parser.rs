@@ -119,7 +119,7 @@ impl<'a> Parser<'a> {
   // ---- comments ----
 
   /// Parses a comment, which runs to the end of the line. The terminating newline is left alone.
-  fn parse_comment(&mut self, blank_line_before: bool) -> Comment<'a> {
+  fn parse_comment(&mut self, blank_line_before: bool, indent_in_source: usize) -> Comment<'a> {
     let start = self.pos;
     while let Some(c) = self.peek() {
       if c == '\n' || c == '\r' {
@@ -132,6 +132,7 @@ impl<'a> Parser<'a> {
       // take Unicode whitespace such as a no-break space, which is legitimate comment content
       text: self.text[start..self.pos].trim_end_matches([' ', '\t']),
       blank_line_before,
+      indent_in_source,
     }
   }
 
@@ -139,7 +140,7 @@ impl<'a> Parser<'a> {
   fn parse_trailing_comment(&mut self) -> Option<Comment<'a>> {
     self.skip_spaces();
     if self.peek() == Some('#') {
-      Some(self.parse_comment(false))
+      Some(self.parse_comment(false, 0))
     } else {
       None
     }
@@ -173,7 +174,7 @@ impl<'a> Parser<'a> {
 
       match self.peek() {
         Some('#') => {
-          items.push(RootItem::Comment(self.parse_comment(blank_line_before)));
+          items.push(RootItem::Comment(self.parse_comment(blank_line_before, indent_in_source)));
           continue;
         }
         Some('[') => items.push(RootItem::TableHeader(self.parse_table_header(blank_line_before, indent_in_source)?)),
@@ -492,7 +493,7 @@ impl<'a> Parser<'a> {
         }
         Some('#') => {
           let has_preceding = !values.is_empty() || !pending_comments.is_empty() || comment_after_open.is_some();
-          let comment = self.parse_comment(has_preceding && newlines >= 2);
+          let comment = self.parse_comment(has_preceding && newlines >= 2, 0);
           pending_comments.push(comment);
           newlines = 0;
           continue;
@@ -585,7 +586,7 @@ impl<'a> Parser<'a> {
         }
         Some('#') => {
           let has_preceding = !entries.is_empty() || !pending_comments.is_empty() || comment_after_open.is_some();
-          let comment = self.parse_comment(has_preceding && newlines >= 2);
+          let comment = self.parse_comment(has_preceding && newlines >= 2, 0);
           pending_comments.push(comment);
           newlines = 0;
           continue;

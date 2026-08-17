@@ -18,6 +18,10 @@ pub struct Comment<'a> {
   pub text: &'a str,
   /// Whether a blank line separates this comment from whatever precedes it.
   pub blank_line_before: bool,
+  /// How many whitespace characters preceded the comment on its line, which is what the
+  /// `maintain` indent settings go by. Zero for a comment that isn't on a line of its own at the
+  /// top level, which is never indented independently.
+  pub indent_in_source: usize,
 }
 
 /// A parsed TOML document.
@@ -207,6 +211,20 @@ impl Value<'_> {
       ValueKind::InlineTable(table) => table.entries.iter().any(|entry| entry.value.contains_string_spanning_lines()),
     }
   }
+
+  /// Whether an inline table anywhere within this value holds a comment of its own.
+  ///
+  /// Such a comment is only written when its table is written over several lines, so a value
+  /// containing one can never be collapsed onto a single line without losing it. An array's own
+  /// comments don't count: an array keeps them however the table around it is written, since the
+  /// newlines they bring sit within a value, which TOML 1.0 already allows between braces.
+  fn contains_inline_table_comment(&self) -> bool {
+    match &self.kind {
+      ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => false,
+      ValueKind::Array(array) => array.values.iter().any(|value| value.value.contains_inline_table_comment()),
+      ValueKind::InlineTable(table) => table.contains_own_comment(),
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -302,10 +320,20 @@ impl InlineTable<'_> {
         .any(|entry| entry.trailing_comment.is_some() || !entry.leading_comments.is_empty())
   }
 
+  /// Whether this table, or one nested within it, holds a comment of its own.
+  ///
+  /// A table nested inside one written on a single line is written on a single line too, and a
+  /// single line has nowhere to put a comment, so the table around it has to be broken up as well.
+  /// Doing so is always safe: a comment between braces runs to the end of its line, so a table
+  /// holding one was already written over several lines and the document is already TOML 1.1.
+  pub fn contains_own_comment(&self) -> bool {
+    self.has_own_comment() || self.entries.iter().any(|entry| entry.value.contains_inline_table_comment())
+  }
+
   /// Whether the table should be printed over multiple lines, which only a TOML 1.1 parser
   /// accepts. A table the author wrote that way is kept that way unless it is asked to collapse,
-  /// but one holding a comment of its own has no choice.
+  /// but one holding a comment anywhere within it has no choice.
   pub fn force_use_new_lines(&self, config: &Configuration) -> bool {
-    self.has_own_comment() || (!config.inline_table_prefer_single_line && self.multi_line_in_source)
+    self.contains_own_comment() || (!config.inline_table_prefer_single_line && self.multi_line_in_source)
   }
 }

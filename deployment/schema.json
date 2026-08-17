@@ -103,7 +103,7 @@
       }]
     },
     "sortKeys": {
-      "description": "Whether to alphabetically sort the entries of each table. Entries separated by a blank line are sorted within their own run, and table headers are never moved.",
+      "description": "Whether to alphabetically sort the entries of each table. Entries separated by a blank line are sorted within their own run, and table headers are never moved. A comment travels with the entry written beneath it, except for the comments at the very top of a run, which are treated as a heading for that run and stay there.",
       "type": "boolean",
       "default": false,
       "oneOf": [{
@@ -115,7 +115,7 @@
       }]
     },
     "sortArrays": {
-      "description": "Whether to alphabetically sort the values of an array. Values separated by a blank line are sorted within their own run, and an array holding an array or inline table is left alone. Note that this changes the meaning of a document whose array order is significant.",
+      "description": "Whether to alphabetically sort the values of an array. Values separated by a blank line are sorted within their own run, unless the array is written on a single line, which leaves nowhere to keep those dividers. An array holding an array or inline table is left alone. A comment travels with the value written beneath it, except for the comments at the very top of a run, which are treated as a heading for that run and stay there. Note that this changes the meaning of a document whose array order is significant.",
       "type": "boolean",
       "default": false,
       "oneOf": [{
@@ -127,7 +127,7 @@
       }]
     },
     "sortInlineTables": {
-      "description": "Whether to alphabetically sort the entries of an inline table.",
+      "description": "Whether to alphabetically sort the entries of an inline table. A comment travels with the entry written beneath it, except for the comments at the very top of a run, which are treated as a heading for that run and stay there.",
       "type": "boolean",
       "default": false,
       "oneOf": [{
@@ -142,6 +142,28 @@
       "description": "Whether to collapse an array or inline table written over several lines onto a single line when it fits. A comment written within one keeps it expanded.",
       "type": "boolean",
       "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "array.preferSingleLine": {
+      "description": "Whether to collapse an array written over several lines onto a single line when it fits. A comment written within it keeps it expanded. Defaults to whatever `preferSingleLine` is set to.",
+      "type": "boolean",
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "inlineTable.preferSingleLine": {
+      "description": "Whether to collapse an inline table written over several lines onto a single line. A comment written anywhere within it keeps it expanded. Defaults to whatever `preferSingleLine` is set to.",
+      "type": "boolean",
       "oneOf": [{
         "const": true,
         "description": ""
@@ -248,13 +270,35 @@
       "$ref": "#/definitions/preferSingleLine"
     },
     "array.preferSingleLine": {
-      "$ref": "#/definitions/preferSingleLine"
+      "$ref": "#/definitions/array.preferSingleLine"
+    },
+    "array.preferSingleLine": {
+      "description": "Whether to collapse an array written over several lines onto a single line when it fits. A comment written within it keeps it expanded. Defaults to whatever `preferSingleLine` is set to.",
+      "type": "boolean",
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "inlineTable.preferSingleLine": {
+      "description": "Whether to collapse an inline table written over several lines onto a single line. A comment written anywhere within it keeps it expanded. Defaults to whatever `preferSingleLine` is set to.",
+      "type": "boolean",
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
     },
     "array.spaceSurroundingBrackets": {
       "$ref": "#/definitions/array.spaceSurroundingBrackets"
     },
     "inlineTable.preferSingleLine": {
-      "$ref": "#/definitions/preferSingleLine"
+      "$ref": "#/definitions/inlineTable.preferSingleLine"
     },
     "inlineTable.spaceSurroundingBraces": {
       "$ref": "#/definitions/inlineTable.spaceSurroundingBraces"

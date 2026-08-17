@@ -42,3 +42,19 @@ a = [
   "a",
   "b",
 ]
+
+== should sort as one run when the array is collapsed onto a single line ==
+a = [2,
+
+1]
+b = { c = [
+  "d",
+  "c",
+
+  "b",
+  "a",
+] }
+
+[expect]
+a = [1, 2]
+b = { c = ["a", "b", "c", "d"] }

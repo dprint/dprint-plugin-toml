@@ -5,6 +5,7 @@ use crate::ast::*;
 use crate::sorting::section_end;
 use crate::sorting::sort_root_entries;
 use crate::sorting::sort_with_comments;
+use crate::sorting::value_sort_key;
 
 pub fn is_cargo_toml_file(file_path: &Path) -> bool {
   // don't need to worry about different casing because Cargo.toml will
@@ -72,9 +73,10 @@ pub fn apply_cargo_toml_conventions(root: &mut Root) {
 }
 
 /// The name an entry sorts under. Only the first segment of a dotted key is used, so that
-/// `serde.workspace` sorts beside `serde`.
+/// `serde.workspace` sorts beside `serde`, and the quotes around a quoted segment are ignored, so
+/// that `"serde"` sorts beside `serde` rather than under the quote character.
 fn entry_sort_key<'a>(entry: &'a Entry<'_>) -> &'a str {
-  entry.key.first.text
+  entry.key.first.unquoted_text()
 }
 
 fn sort_cargo_package_section(left: &Entry, right: &Entry) -> Ordering {
@@ -106,13 +108,8 @@ fn sort_workspace_members(entry: &mut Entry) {
   if !all_strings {
     return;
   }
-  sort_with_comments(&mut array.values, |left, right| scalar_text(&left.value).cmp(scalar_text(&right.value)));
-}
-
-fn scalar_text<'a>(value: &'a Value<'_>) -> &'a str {
-  match &value.kind {
-    ValueKind::Scalar(text) => text,
-    // the all-strings guard admits nothing else
-    _ => "",
-  }
+  // Sorted by contents rather than by the text as written: the quote a member happens to be
+  // written with is not part of its name, and `quoteStyle` may go on to rewrite it anyway, which
+  // would leave the members looking unsorted.
+  sort_with_comments(&mut array.values, |left, right| value_sort_key(&left.value).cmp(&value_sort_key(&right.value)));
 }

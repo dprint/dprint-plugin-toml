@@ -17,7 +17,7 @@ pub fn apply_sorting(root: &mut Root, config: &Configuration) {
   if config.sort_arrays || config.sort_inline_tables {
     for item in &mut root.items {
       if let RootItem::Entry(entry) = item {
-        sort_within_value(&mut entry.value, config);
+        sort_within_value(&mut entry.value, config, false);
       }
     }
   }
@@ -37,28 +37,50 @@ fn sort_root_keys(root: &mut Root) {
   }
 }
 
-fn sort_within_value(value: &mut Value, config: &Configuration) {
+/// `within_single_line` is whether an enclosing inline table is written on a single line, which
+/// collapses everything inside it onto that line however it was written.
+fn sort_within_value(value: &mut Value, config: &Configuration, within_single_line: bool) {
   match &mut value.kind {
     ValueKind::Array(array) => {
+      let single_line = within_single_line || !array.force_use_new_lines(config);
       for item in &mut array.values {
-        sort_within_value(&mut item.value, config);
+        sort_within_value(&mut item.value, config, single_line);
       }
       // Only the text of a value decides where it sorts, so an array holding one that has no text
       // of its own — another array, or an inline table — is left alone rather than being
       // shuffled around an ordering that says nothing.
       if config.sort_arrays && array.values.iter().all(|item| value_sort_key(&item.value).is_some()) {
+        if single_line {
+          forget_blank_lines(&mut array.values);
+        }
         sort_with_comments(&mut array.values, |left, right| value_sort_key(&left.value).cmp(&value_sort_key(&right.value)));
       }
     }
     ValueKind::InlineTable(table) => {
+      let single_line = within_single_line || !table.force_use_new_lines(config);
       for entry in &mut table.entries {
-        sort_within_value(&mut entry.value, config);
+        sort_within_value(&mut entry.value, config, single_line);
       }
       if config.sort_inline_tables {
+        if single_line {
+          forget_blank_lines(&mut table.entries);
+        }
         sort_with_comments(&mut table.entries, |left, right| compare_keys(&left.key, &right.key));
       }
     }
     ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => {}
+  }
+}
+
+/// Drops the blank lines dividing a collection that is about to be written on a single line.
+///
+/// Sorting treats a blank line as a divider and never moves a value past one, but a single line
+/// has nowhere to keep those dividers. Honouring them here would leave the file looking unsorted
+/// and sort differently the second time around, once the blank lines are gone from the source.
+fn forget_blank_lines<'a>(values: &mut [impl Sortable<'a>]) {
+  for value in values {
+    value.set_blank_line_before(false);
+    value.forget_comment_blank_lines();
   }
 }
 
@@ -81,9 +103,9 @@ fn compare_keys(left: &Key, right: &Key) -> Ordering {
 
 /// The text a value sorts under, or `None` for a value that is a collection rather than text.
 ///
-/// A string sorts by its contents, so that the quote it happens to be written with -- which the
+/// A string sorts by its contents, so that the quote it happens to be written with — which the
 /// `quoteStyle` option may go on to change anyway — doesn't decide where it lands.
-fn value_sort_key<'a>(value: &'a Value<'_>) -> Option<&'a str> {
+pub fn value_sort_key<'a>(value: &'a Value<'_>) -> Option<&'a str> {
   match &value.kind {
     ValueKind::Scalar(text) => Some(unquoted(text, &["\"", "'"])),
     ValueKind::MultiLineString(text) => Some(unquoted(text, &["\"\"\"", "'''"])),
@@ -120,6 +142,10 @@ pub trait Sortable<'a> {
   fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>);
   fn blank_line_before(&self) -> bool;
   fn set_blank_line_before(&mut self, value: bool);
+
+  /// Clears the blank line above each of this value's leading comments, which count towards the
+  /// run it starts just as its own does.
+  fn forget_comment_blank_lines(&mut self);
 }
 
 impl<'a> Sortable<'a> for ArrayValue<'a> {
@@ -138,6 +164,11 @@ impl<'a> Sortable<'a> for ArrayValue<'a> {
   fn set_blank_line_before(&mut self, value: bool) {
     self.blank_line_before = value;
   }
+  fn forget_comment_blank_lines(&mut self) {
+    for comment in &mut self.leading_comments {
+      comment.blank_line_before = false;
+    }
+  }
 }
 
 impl<'a> Sortable<'a> for Entry<'a> {
@@ -155,6 +186,11 @@ impl<'a> Sortable<'a> for Entry<'a> {
   }
   fn set_blank_line_before(&mut self, value: bool) {
     self.blank_line_before = value;
+  }
+  fn forget_comment_blank_lines(&mut self) {
+    for comment in &mut self.leading_comments {
+      comment.blank_line_before = false;
+    }
   }
 }
 

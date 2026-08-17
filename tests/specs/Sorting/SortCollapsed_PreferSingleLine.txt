@@ -1,0 +1,20 @@
+~~ sortArrays: true, sortInlineTables: true, preferSingleLine: true ~~
+== should sort as one run when the blank lines dividing it are about to be discarded ==
+a = [
+  "d",
+  "c",
+
+  "b",
+  "a",
+]
+b = {
+  d = 1,
+  c = 2,
+
+  b = 3,
+  a = 4,
+}
+
+[expect]
+a = ["a", "b", "c", "d"]
+b = { a = 4, b = 3, c = 2, d = 1 }

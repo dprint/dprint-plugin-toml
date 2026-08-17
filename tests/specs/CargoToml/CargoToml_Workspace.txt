@@ -748,3 +748,11 @@ members = [
   "a",
   "z",
 ]
+
+== should sort members by contents rather than by the quote they are written with ==
+[workspace]
+members = ['zeta', "beta", 'alpha', "gamma"]
+
+[expect]
+[workspace]
+members = ["alpha", "beta", "gamma", "zeta"]
