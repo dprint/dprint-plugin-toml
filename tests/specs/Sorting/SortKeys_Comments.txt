@@ -1,0 +1,136 @@
+~~ sortKeys: true ~~
+== should carry a multi-line comment block with its entry ==
+[a]
+z = 1
+# one
+# two
+b = 2
+
+[expect]
+[a]
+# one
+# two
+b = 2
+z = 1
+
+== should carry a trailing comment with its entry ==
+[a]
+z = 1 # about z
+b = 2 # about b
+
+[expect]
+[a]
+b = 2 # about b
+z = 1 # about z
+
+== should carry both a leading and a trailing comment with its entry ==
+[a]
+z = 1
+# about b
+b = 2 # trailing b
+
+[expect]
+[a]
+# about b
+b = 2 # trailing b
+z = 1
+
+== should leave a comment after the last entry of a section where it is ==
+[a]
+z = 1
+b = 2
+# that is all
+
+[b]
+y = 1
+
+[expect]
+[a]
+b = 2
+z = 1
+# that is all
+
+[b]
+y = 1
+
+== should not carry a comment across a table header ==
+[a]
+z = 1
+# about b
+
+[b]
+b = 2
+
+[expect]
+[a]
+z = 1
+# about b
+
+[b]
+b = 2
+
+== should keep a heading above each run when every entry is its own run ==
+# first
+z = 1
+
+# second
+b = 2
+
+[expect]
+# first
+z = 1
+
+# second
+b = 2
+
+== should keep a comment between the entry blocks of two runs ==
+[a]
+d = 1
+c = 2
+
+# second run
+b = 3
+a = 4
+
+[expect]
+[a]
+c = 2
+d = 1
+
+# second run
+a = 4
+b = 3
+
+== should sort a section that holds only comments by leaving it alone ==
+[a]
+# one
+# two
+
+[b]
+z = 1
+
+[expect]
+[a]
+# one
+# two
+
+[b]
+z = 1
+
+== should keep the blank line between a heading and the entry that sorts first ==
+[a]
+# heading
+
+# about z
+z = 1
+# about b
+b = 2
+
+[expect]
+[a]
+# heading
+
+# about b
+b = 2
+# about z
+z = 1

@@ -1,0 +1,18 @@
+~~ indentTables: never ~~
+== should remove the indentation of a nested table ==
+[[list-entry]]
+key = 1
+
+  [list-entry.subtable]
+  key = 2
+
+  # trailing note
+
+[expect]
+[[list-entry]]
+key = 1
+
+[list-entry.subtable]
+key = 2
+
+# trailing note

@@ -118,8 +118,8 @@ c = "4"
 
 [expect]
 [dependencies]
-# 1
 a = "1"
+# 1
 b = "2"
 
 # 2
@@ -182,3 +182,15 @@ version.foo = 1
 name = "x"
 version.workspace = true
 version.foo = 1
+
+== should ignore the quotes around a dependency key when sorting ==
+[dependencies]
+"zed" = "1"
+anyhow = "1"
+beta = "1"
+
+[expect]
+[dependencies]
+anyhow = "1"
+beta = "1"
+"zed" = "1"

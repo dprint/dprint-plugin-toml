@@ -1,0 +1,35 @@
+== should not collapse a table holding a nested table with a comment ==
+a = { b = {
+  # c
+} }
+
+[expect]
+a = {
+  b = {
+    # c
+  },
+}
+
+== should keep a comment inside a table nested in a single-line one ==
+a = { b = {
+  x = 1 # c
+} }
+
+[expect]
+a = {
+  b = {
+    x = 1, # c
+  },
+}
+
+== should reach through an array to find a nested table's comment ==
+a = [{ b = { # c
+} }]
+
+[expect]
+a = [
+  {
+    b = { # c
+    },
+  },
+]

@@ -1,0 +1,10 @@
+~~ quoteStyle: maintain ~~
+== should keep the quote each string was written with ==
+a = 'hello'
+b = "hello"
+c = ['a', "b"]
+
+[expect]
+a = 'hello'
+b = "hello"
+c = ['a', "b"]

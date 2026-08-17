@@ -1,0 +1,370 @@
+// Reordering the tree, both for the `sort*` options and for the Cargo.toml conventions.
+//
+// Everything here treats a blank line as a divider the author put there deliberately: each run
+// between blank lines is sorted on its own and runs never move past each other. Comments written
+// above something travel with it, except for the comments heading a run, which stay at its top.
+
+use std::cmp::Ordering;
+
+use crate::ast::*;
+use crate::configuration::Configuration;
+
+/// Applies whichever of the sorting options are turned on.
+pub fn apply_sorting(root: &mut Root, config: &Configuration) {
+  if config.sort_keys {
+    sort_root_keys(root);
+  }
+  if config.sort_arrays || config.sort_inline_tables {
+    for item in &mut root.items {
+      if let RootItem::Entry(entry) = item {
+        sort_within_value(&mut entry.value, config, false);
+      }
+    }
+  }
+}
+
+/// Sorts the entries of every table in the file, including the one above the first table header.
+///
+/// Table headers themselves are left where they are: moving one would change which entries belong
+/// to it.
+fn sort_root_keys(root: &mut Root) {
+  let mut start = 0;
+  while start <= root.items.len() {
+    let end = section_end(&root.items, start);
+    sort_root_entries(&mut root.items, start, end, &|left, right| compare_keys(&left.key, &right.key));
+    // the header that ended the section isn't part of the next one
+    start = end + 1;
+  }
+}
+
+/// `within_single_line` is whether an enclosing inline table is written on a single line, which
+/// collapses everything inside it onto that line however it was written.
+fn sort_within_value(value: &mut Value, config: &Configuration, within_single_line: bool) {
+  match &mut value.kind {
+    ValueKind::Array(array) => {
+      let single_line = within_single_line || !array.force_use_new_lines(config);
+      for item in &mut array.values {
+        sort_within_value(&mut item.value, config, single_line);
+      }
+      // Only the text of a value decides where it sorts, so an array holding one that has no text
+      // of its own — another array, or an inline table — is left alone rather than being
+      // shuffled around an ordering that says nothing.
+      if config.sort_arrays && array.values.iter().all(|item| value_sort_key(&item.value).is_some()) {
+        if single_line {
+          forget_blank_lines(&mut array.values);
+        }
+        sort_with_comments(&mut array.values, |left, right| value_sort_key(&left.value).cmp(&value_sort_key(&right.value)));
+      }
+    }
+    ValueKind::InlineTable(table) => {
+      let single_line = within_single_line || !table.force_use_new_lines(config);
+      for entry in &mut table.entries {
+        sort_within_value(&mut entry.value, config, single_line);
+      }
+      if config.sort_inline_tables {
+        if single_line {
+          forget_blank_lines(&mut table.entries);
+        }
+        sort_with_comments(&mut table.entries, |left, right| compare_keys(&left.key, &right.key));
+      }
+    }
+    ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => {}
+  }
+}
+
+/// Drops the blank lines dividing a collection that is about to be written on a single line.
+///
+/// Sorting treats a blank line as a divider and never moves a value past one, but a single line
+/// has nowhere to keep those dividers. Honouring them here would leave the file looking unsorted
+/// and sort differently the second time around, once the blank lines are gone from the source.
+fn forget_blank_lines<'a>(values: &mut [impl Sortable<'a>]) {
+  for value in values {
+    value.set_blank_line_before(false);
+    value.forget_comment_blank_lines();
+  }
+}
+
+/// Compares two keys segment by segment, ignoring quoting so that `"serde"` sorts beside `serde`.
+fn compare_keys(left: &Key, right: &Key) -> Ordering {
+  let mut left = left.parts();
+  let mut right = right.parts();
+  loop {
+    match (left.next(), right.next()) {
+      (Some(left), Some(right)) => match left.unquoted_text().cmp(right.unquoted_text()) {
+        Ordering::Equal => continue,
+        ordering => return ordering,
+      },
+      (Some(_), None) => return Ordering::Greater,
+      (None, Some(_)) => return Ordering::Less,
+      (None, None) => return Ordering::Equal,
+    }
+  }
+}
+
+/// The text a value sorts under, or `None` for a value that is a collection rather than text.
+///
+/// A string sorts by its contents, so that the quote it happens to be written with — which the
+/// `quoteStyle` option may go on to change anyway — doesn't decide where it lands.
+pub fn value_sort_key<'a>(value: &'a Value<'_>) -> Option<&'a str> {
+  match &value.kind {
+    ValueKind::Scalar(text) => Some(unquoted(text, &["\"", "'"])),
+    ValueKind::MultiLineString(text) => Some(unquoted(text, &["\"\"\"", "'''"])),
+    ValueKind::Array(_) | ValueKind::InlineTable(_) => None,
+  }
+}
+
+fn unquoted<'a>(text: &'a str, quotes: &[&str]) -> &'a str {
+  for quote in quotes {
+    if let Some(inner) = text.strip_prefix(quote).and_then(|text| text.strip_suffix(quote)) {
+      return inner;
+    }
+  }
+  text
+}
+
+/// The index just past the last item belonging to the section starting at `start`, which runs until
+/// the next table header.
+pub fn section_end(items: &[RootItem], start: usize) -> usize {
+  match items.get(start..) {
+    Some(items_from_start) => items_from_start
+      .iter()
+      .position(RootItem::is_table_header)
+      .map(|i| start + i)
+      .unwrap_or(items.len()),
+    None => items.len(),
+  }
+}
+
+/// Something that can be sorted among its siblings, carrying the comments written above it.
+pub trait Sortable<'a> {
+  fn leading_comments(&self) -> &[Comment<'a>];
+  fn take_leading_comments(&mut self) -> Vec<Comment<'a>>;
+  fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>);
+  fn blank_line_before(&self) -> bool;
+  fn set_blank_line_before(&mut self, value: bool);
+
+  /// Clears the blank line above each of this value's leading comments, which count towards the
+  /// run it starts just as its own does.
+  fn forget_comment_blank_lines(&mut self);
+}
+
+impl<'a> Sortable<'a> for ArrayValue<'a> {
+  fn leading_comments(&self) -> &[Comment<'a>] {
+    &self.leading_comments
+  }
+  fn take_leading_comments(&mut self) -> Vec<Comment<'a>> {
+    std::mem::take(&mut self.leading_comments)
+  }
+  fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>) {
+    self.leading_comments = comments;
+  }
+  fn blank_line_before(&self) -> bool {
+    self.blank_line_before
+  }
+  fn set_blank_line_before(&mut self, value: bool) {
+    self.blank_line_before = value;
+  }
+  fn forget_comment_blank_lines(&mut self) {
+    for comment in &mut self.leading_comments {
+      comment.blank_line_before = false;
+    }
+  }
+}
+
+impl<'a> Sortable<'a> for Entry<'a> {
+  fn leading_comments(&self) -> &[Comment<'a>] {
+    &self.leading_comments
+  }
+  fn take_leading_comments(&mut self) -> Vec<Comment<'a>> {
+    std::mem::take(&mut self.leading_comments)
+  }
+  fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>) {
+    self.leading_comments = comments;
+  }
+  fn blank_line_before(&self) -> bool {
+    self.blank_line_before
+  }
+  fn set_blank_line_before(&mut self, value: bool) {
+    self.blank_line_before = value;
+  }
+  fn forget_comment_blank_lines(&mut self) {
+    for comment in &mut self.leading_comments {
+      comment.blank_line_before = false;
+    }
+  }
+}
+
+/// Sorts values that hold their own leading comments, such as the values of an array or the
+/// entries of an inline table.
+pub fn sort_with_comments<'a, T: Sortable<'a>>(values: &mut Vec<T>, cmp: impl Fn(&T, &T) -> Ordering) {
+  let mut units = values
+    .drain(..)
+    .map(|mut value| Unit {
+      leading_blank: value
+        .leading_comments()
+        .first()
+        .map(|c| c.blank_line_before)
+        .unwrap_or(value.blank_line_before()),
+      inner_blank: !value.leading_comments().is_empty() && value.blank_line_before(),
+      starts_group: value.blank_line_before() || value.leading_comments().iter().any(|c| c.blank_line_before),
+      leading_comments: value.take_leading_comments(),
+      value,
+    })
+    .collect::<Vec<_>>();
+  sort_units(&mut units, cmp);
+  values.extend(units.into_iter().map(|mut unit| {
+    match unit.leading_comments.first_mut() {
+      Some(first) => {
+        first.blank_line_before = unit.leading_blank;
+        unit.value.set_blank_line_before(unit.inner_blank);
+      }
+      None => unit.value.set_blank_line_before(unit.leading_blank),
+    }
+    unit.value.set_leading_comments(unit.leading_comments);
+    unit.value
+  }));
+}
+
+/// One sortable thing along with the comments written above it.
+struct Unit<'a, T> {
+  leading_comments: Vec<Comment<'a>>,
+  /// Whether a blank line is rendered above this unit's first element.
+  leading_blank: bool,
+  /// Whether a blank line is rendered between this unit's comments and the item itself. Only
+  /// meaningful when the unit has comments.
+  inner_blank: bool,
+  /// Whether a blank line appears anywhere between the previous item and this one, which the
+  /// author uses to divide a section into groups. It may sit either above this unit's comments or
+  /// between them and the item itself.
+  starts_group: bool,
+  value: T,
+}
+
+/// Sorts the entries of `items[start..end]`, keeping each entry's own comments with it.
+pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl Fn(&Entry, &Entry) -> Ordering) {
+  // Split the section into one unit per entry, each carrying the comments written above it. Any
+  // comments after the final entry belong to no entry and stay where they are.
+  let mut units: Vec<Unit<Entry>> = Vec::new();
+  let mut pending: Vec<Comment> = Vec::new();
+  let mut trailing: Vec<Comment> = Vec::new();
+  for item in items.drain(start..end) {
+    match item {
+      RootItem::Comment(comment) => pending.push(comment),
+      RootItem::Entry(entry) => units.push(Unit {
+        leading_blank: pending.first().map(|c| c.blank_line_before).unwrap_or(entry.blank_line_before),
+        inner_blank: !pending.is_empty() && entry.blank_line_before,
+        starts_group: entry.blank_line_before || pending.iter().any(|c| c.blank_line_before),
+        leading_comments: std::mem::take(&mut pending),
+        value: entry,
+      }),
+      // a section runs up to the next header, so nothing else can appear in it
+      RootItem::TableHeader(_) => unreachable!(),
+    }
+  }
+  trailing.append(&mut pending);
+
+  sort_units(&mut units, |left, right| cmp(left, right));
+
+  let sorted = units
+    .into_iter()
+    .flat_map(|unit| {
+      let leading_blank = unit.leading_blank;
+      let mut entry = unit.value;
+      let mut items = Vec::with_capacity(unit.leading_comments.len() + 1);
+      let mut comments = unit.leading_comments.into_iter();
+      match comments.next() {
+        Some(mut first) => {
+          first.blank_line_before = leading_blank;
+          items.push(RootItem::Comment(first));
+          items.extend(comments.map(RootItem::Comment));
+          entry.blank_line_before = unit.inner_blank;
+        }
+        None => entry.blank_line_before = leading_blank,
+      }
+      items.push(RootItem::Entry(entry));
+      items
+    })
+    .chain(trailing.into_iter().map(RootItem::Comment))
+    .collect::<Vec<_>>();
+  items.splice(start..start, sorted);
+}
+
+/// Sorts `units` in place, treating a blank line as a divider the author put there deliberately:
+/// each run between blank lines is sorted on its own and runs never move past each other.
+///
+/// The comments above a run's first entry belong to the run rather than to that entry when a blank
+/// line sets them apart -- either above them or between them and the entry beneath. A heading like
+/// `# exts` then stays at the top of its run instead of being carried off to wherever its entry
+/// happens to sort. Comments written flush against their entry, with nothing separating them from
+/// what came before, are that entry's own and travel with it.
+/// How many of a group's first unit's leading comments head the group rather than describe the
+/// entry they sit above.
+///
+/// A blank line is what tells the two apart, wherever the author put it: above the comments,
+/// between them and the entry, or part way down the block, which splits a heading from the notes
+/// written against the entry itself. Only a group's first unit can carry any of those blanks,
+/// since a later one would have started a group of its own.
+fn heading_comment_count<T>(unit: &Unit<T>) -> usize {
+  if unit.inner_blank {
+    return unit.leading_comments.len();
+  }
+  // the blank above the first comment is `leading_blank` rather than a split within the block,
+  // so only the comments after it are looked at
+  match unit.leading_comments.iter().skip(1).rposition(|c| c.blank_line_before) {
+    Some(index) => index + 1,
+    None if unit.leading_blank => unit.leading_comments.len(),
+    None => 0,
+  }
+}
+
+fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
+  let mut group_start = 0;
+  while group_start < units.len() {
+    let mut group_end = group_start + 1;
+    while group_end < units.len() && !units[group_end].starts_group {
+      group_end += 1;
+    }
+
+    let group = &mut units[group_start..group_end];
+    let leading_blank = group[0].leading_blank;
+    let heading_len = heading_comment_count(&group[0]);
+    let is_heading = heading_len > 0;
+    // The heading is lifted off the group's first entry and put back at the top once the group is
+    // sorted; whatever comments are left below the split describe that entry and travel with it.
+    let (group_comments, blank_under_heading) = if is_heading {
+      let head = &mut group[0];
+      let mut group_comments = head.leading_comments.drain(..heading_len).collect::<Vec<_>>();
+      let blank = match head.leading_comments.first_mut() {
+        // the blank that separated the heading from the comments describing the entry
+        Some(first) => std::mem::replace(&mut first.blank_line_before, false),
+        // the heading took every comment, so what follows it is the entry itself
+        None => std::mem::replace(&mut head.inner_blank, false),
+      };
+      // the blank above the heading belongs to the group and is re-applied below
+      if let Some(first) = group_comments.first_mut() {
+        first.blank_line_before = false;
+      }
+      (group_comments, blank)
+    } else {
+      (Vec::new(), false)
+    };
+
+    group.sort_by(|left, right| cmp(&left.value, &right.value));
+
+    for unit in group.iter_mut() {
+      unit.leading_blank = false;
+    }
+    let head = &mut group[0];
+    if is_heading {
+      match head.leading_comments.first_mut() {
+        // the blank now separates the heading from whatever sorted to the top of the group
+        Some(first) => first.blank_line_before = blank_under_heading,
+        None => head.inner_blank = blank_under_heading,
+      }
+      head.leading_comments.splice(0..0, group_comments);
+    }
+    head.leading_blank = leading_blank;
+
+    group_start = group_end;
+  }
+}

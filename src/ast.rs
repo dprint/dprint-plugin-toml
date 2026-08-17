@@ -9,6 +9,8 @@
 // conventions reorder nodes and adjust their blank-line flags, but the text itself is only ever
 // read -- so a plain `&str` is enough and a `Cow` would only make each node larger.
 
+use crate::configuration::Configuration;
+
 /// A comment, from the `#` up to (but not including) the end of the line.
 #[derive(Debug, Clone)]
 pub struct Comment<'a> {
@@ -16,6 +18,10 @@ pub struct Comment<'a> {
   pub text: &'a str,
   /// Whether a blank line separates this comment from whatever precedes it.
   pub blank_line_before: bool,
+  /// How many whitespace characters preceded the comment on its line, which is what the
+  /// `maintain` indent settings go by. Zero for a comment that isn't on a line of its own at the
+  /// top level, which is never indented independently.
+  pub indent_in_source: usize,
 }
 
 /// A parsed TOML document.
@@ -55,6 +61,9 @@ pub struct TableHeader<'a> {
   pub is_array_of_tables: bool,
   pub blank_line_before: bool,
   pub trailing_comment: Option<Comment<'a>>,
+  /// How many whitespace characters preceded the header on its line, which is what the
+  /// `maintain` indent settings go by.
+  pub indent_in_source: usize,
 }
 
 /// A key/value pair.
@@ -67,6 +76,10 @@ pub struct Entry<'a> {
   /// Comments on the lines immediately above this entry. Only populated for entries inside an
   /// inline table; at the top level such comments are separate [`RootItem::Comment`]s.
   pub leading_comments: Vec<Comment<'a>>,
+  /// How many whitespace characters preceded the entry on its line, which is what the `maintain`
+  /// indent settings go by. Always zero for an entry inside an inline table, which is never
+  /// indented on its own.
+  pub indent_in_source: usize,
 }
 
 /// A key, which may be dotted (`a.b.c`).
@@ -109,6 +122,19 @@ impl Key<'_> {
       }
     }
     rest.is_empty()
+  }
+
+  /// Whether this key names a strict ancestor of `other`, as `[a]` does of `[a.b]`. Quoting is
+  /// ignored, since `[a."b"]` names the same table as `[a.b]`.
+  pub fn is_strict_prefix_of(&self, other: &Key<'_>) -> bool {
+    let mut other_parts = other.parts();
+    for part in self.parts() {
+      match other_parts.next() {
+        Some(other_part) if other_part.unquoted_text() == part.unquoted_text() => {}
+        _ => return false,
+      }
+    }
+    other_parts.next().is_some()
   }
 }
 
@@ -158,14 +184,14 @@ impl Value<'_> {
   /// otherwise repeat at every level. It has to be certain, so an inline table the author wrote on
   /// one line counts for nothing within it except a string, whose own newlines are kept wherever it
   /// appears.
-  pub fn is_known_multi_line(&self) -> bool {
+  pub fn is_known_multi_line(&self, config: &Configuration) -> bool {
     match &self.kind {
       // a triple quoted string is only written over several lines if its contents are
       ValueKind::MultiLineString(text) => text.contains('\n'),
       ValueKind::Scalar(_) => false,
-      ValueKind::Array(array) => array.force_use_new_lines() || array.values.iter().any(|value| value.value.is_known_multi_line()),
+      ValueKind::Array(array) => array.force_use_new_lines(config) || array.values.iter().any(|value| value.value.is_known_multi_line(config)),
       ValueKind::InlineTable(table) => {
-        if table.multi_line_in_source || table.has_own_comment() {
+        if table.force_use_new_lines(config) {
           true
         } else {
           // the table is printed on one line, collapsing any collection within it, so only a string
@@ -183,6 +209,20 @@ impl Value<'_> {
       ValueKind::Scalar(_) => false,
       ValueKind::Array(array) => array.values.iter().any(|value| value.value.contains_string_spanning_lines()),
       ValueKind::InlineTable(table) => table.entries.iter().any(|entry| entry.value.contains_string_spanning_lines()),
+    }
+  }
+
+  /// Whether an inline table anywhere within this value holds a comment of its own.
+  ///
+  /// Such a comment is only written when its table is written over several lines, so a value
+  /// containing one can never be collapsed onto a single line without losing it. An array's own
+  /// comments don't count: an array keeps them however the table around it is written, since the
+  /// newlines they bring sit within a value, which TOML 1.0 already allows between braces.
+  fn contains_inline_table_comment(&self) -> bool {
+    match &self.kind {
+      ValueKind::Scalar(_) | ValueKind::MultiLineString(_) => false,
+      ValueKind::Array(array) => array.values.iter().any(|value| value.value.contains_inline_table_comment()),
+      ValueKind::InlineTable(table) => table.contains_own_comment(),
     }
   }
 }
@@ -213,14 +253,30 @@ pub struct Array<'a> {
 impl Array<'_> {
   /// Whether the array should be printed over multiple lines. An array the author broke up is kept
   /// broken up, but one that holds nothing at all collapses.
-  pub fn force_use_new_lines(&self) -> bool {
+  pub fn force_use_new_lines(&self, config: &Configuration) -> bool {
     // A comment written on its own line before the closing bracket is only given a line of its own
     // when the array is broken up. Left on one line it is printed against the last value, turning
     // it into that value's trailing comment and formatting differently the second time around.
     if !self.comments_before_close.is_empty() {
       return true;
     }
+    if config.array_prefer_single_line {
+      // The author's layout no longer decides this, so only a comment does. Any comment runs to the
+      // end of its line, so an array holding one can't be written on a single line.
+      return self.has_own_comment();
+    }
     self.multi_line_in_source && !(self.values.is_empty() && self.comment_after_open.is_none())
+  }
+
+  /// Whether a comment sits directly within this array's brackets rather than inside one of its
+  /// values.
+  fn has_own_comment(&self) -> bool {
+    self.comment_after_open.is_some()
+      || !self.comments_before_close.is_empty()
+      || self
+        .values
+        .iter()
+        .any(|value| value.trailing_comment.is_some() || !value.leading_comments.is_empty())
   }
 }
 
@@ -262,5 +318,22 @@ impl InlineTable<'_> {
         .entries
         .iter()
         .any(|entry| entry.trailing_comment.is_some() || !entry.leading_comments.is_empty())
+  }
+
+  /// Whether this table, or one nested within it, holds a comment of its own.
+  ///
+  /// A table nested inside one written on a single line is written on a single line too, and a
+  /// single line has nowhere to put a comment, so the table around it has to be broken up as well.
+  /// Doing so is always safe: a comment between braces runs to the end of its line, so a table
+  /// holding one was already written over several lines and the document is already TOML 1.1.
+  pub fn contains_own_comment(&self) -> bool {
+    self.has_own_comment() || self.entries.iter().any(|entry| entry.value.contains_inline_table_comment())
+  }
+
+  /// Whether the table should be printed over multiple lines, which only a TOML 1.1 parser
+  /// accepts. A table the author wrote that way is kept that way unless it is asked to collapse,
+  /// but one holding a comment anywhere within it has no choice.
+  pub fn force_use_new_lines(&self, config: &Configuration) -> bool {
+    self.contains_own_comment() || (!config.inline_table_prefer_single_line && self.multi_line_in_source)
   }
 }

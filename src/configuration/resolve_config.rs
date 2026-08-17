@@ -1,4 +1,7 @@
 use super::Configuration;
+use super::IndentKind;
+use super::QuoteStyle;
+use super::TrailingCommaKind;
 use dprint_core::configuration::*;
 
 /// Resolves configuration from a collection of key value strings.
@@ -28,6 +31,9 @@ pub fn resolve_config(config: ConfigKeyMap, global_config: &GlobalConfiguration)
   let mut diagnostics = Vec::new();
   let mut config = config;
 
+  // general options that the more specific ones below fall back to
+  let prefer_single_line = get_value(&mut config, "preferSingleLine", false, &mut diagnostics);
+
   let resolved_config = Configuration {
     line_width: get_value(
       &mut config,
@@ -48,6 +54,18 @@ pub fn resolve_config(config: ConfigKeyMap, global_config: &GlobalConfiguration)
       global_config.new_line_kind.unwrap_or(RECOMMENDED_GLOBAL_CONFIGURATION.new_line_kind),
       &mut diagnostics,
     ),
+    quote_style: get_value(&mut config, "quoteStyle", QuoteStyle::PreferDouble, &mut diagnostics),
+    indent_tables: get_value(&mut config, "indentTables", IndentKind::Maintain, &mut diagnostics),
+    indent_entries: get_value(&mut config, "indentEntries", IndentKind::Maintain, &mut diagnostics),
+    trailing_commas: get_value(&mut config, "trailingCommas", TrailingCommaKind::OnlyMultiLine, &mut diagnostics),
+    space_surrounding_equals: get_value(&mut config, "spaceSurroundingEquals", true, &mut diagnostics),
+    sort_keys: get_value(&mut config, "sortKeys", false, &mut diagnostics),
+    sort_arrays: get_value(&mut config, "sortArrays", false, &mut diagnostics),
+    sort_inline_tables: get_value(&mut config, "sortInlineTables", false, &mut diagnostics),
+    array_prefer_single_line: get_value(&mut config, "array.preferSingleLine", prefer_single_line, &mut diagnostics),
+    array_space_surrounding_brackets: get_value(&mut config, "array.spaceSurroundingBrackets", false, &mut diagnostics),
+    inline_table_prefer_single_line: get_value(&mut config, "inlineTable.preferSingleLine", prefer_single_line, &mut diagnostics),
+    inline_table_space_surrounding_braces: get_value(&mut config, "inlineTable.spaceSurroundingBraces", true, &mut diagnostics),
     comment_force_leading_space: get_value(&mut config, "comment.forceLeadingSpace", true, &mut diagnostics),
     cargo_apply_conventions: get_value(&mut config, "cargo.applyConventions", true, &mut diagnostics),
   };

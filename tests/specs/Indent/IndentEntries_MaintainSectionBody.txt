@@ -1,0 +1,39 @@
+== should indent a comment sitting above the section's first entry ==
+[a]
+  # note
+
+  x = 1
+
+[expect]
+[a]
+  # note
+
+  x = 1
+
+== should indent a section holding nothing but a comment ==
+[a]
+  # note
+
+[expect]
+[a]
+  # note
+
+== should give a whole section the indent of its first entry ==
+[a]
+  x = 1
+y = 2
+
+[expect]
+[a]
+  x = 1
+  y = 2
+
+== should not indent a section whose first entry is not indented ==
+[a]
+x = 1
+  y = 2
+
+[expect]
+[a]
+x = 1
+y = 2

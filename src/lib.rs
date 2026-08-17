@@ -5,6 +5,7 @@ mod error;
 mod format_text;
 mod generation;
 mod parser;
+mod sorting;
 
 pub use error::FormatError;
 pub use error::ParseError;

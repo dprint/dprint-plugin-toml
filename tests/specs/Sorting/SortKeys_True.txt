@@ -1,0 +1,108 @@
+~~ sortKeys: true ~~
+== should sort the entries of each table ==
+zeta = 1
+alpha = 2
+
+[b]
+d = 1
+c = 2
+
+[a]
+f = 1
+e = 2
+
+[expect]
+alpha = 2
+zeta = 1
+
+[b]
+c = 2
+d = 1
+
+[a]
+e = 2
+f = 1
+
+== should sort each run between blank lines on its own ==
+[a]
+d = 1
+c = 2
+
+b = 3
+a = 4
+
+[expect]
+[a]
+c = 2
+d = 1
+
+a = 4
+b = 3
+
+== should keep a comment with the entry it was written above ==
+[a]
+d = 1
+# about c
+c = 2
+
+[expect]
+[a]
+# about c
+c = 2
+d = 1
+
+== should move a comment written flush against the run's first entry with that entry ==
+[a]
+# about d
+d = 1
+c = 2
+
+[expect]
+[a]
+c = 2
+# about d
+d = 1
+
+== should keep a comment set off by a blank line above it at the top of its run ==
+[a]
+x = 1
+
+# the section
+d = 2
+c = 3
+
+[expect]
+[a]
+x = 1
+
+# the section
+c = 3
+d = 2
+
+== should keep a comment set off by a blank line beneath it at the top of its run ==
+[a]
+# the section
+
+d = 1
+c = 2
+
+[expect]
+[a]
+# the section
+
+c = 2
+d = 1
+
+== should not move table headers ==
+[b]
+z = 1
+
+[a]
+y = 1
+
+[expect]
+[b]
+z = 1
+
+[a]
+y = 1

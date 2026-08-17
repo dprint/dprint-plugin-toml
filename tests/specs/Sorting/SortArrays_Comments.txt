@@ -1,0 +1,140 @@
+~~ sortArrays: true ~~
+== should carry a trailing comment with its value ==
+a = [
+  "c", # about c
+  "a", # about a
+]
+
+[expect]
+a = [
+  "a", # about a
+  "c", # about c
+]
+
+== should carry a leading comment block with its value ==
+a = [
+  "c",
+  # one
+  # two
+  "a",
+]
+
+[expect]
+a = [
+  # one
+  # two
+  "a",
+  "c",
+]
+
+== should move a comment written flush against the first value with that value ==
+a = [
+  # about c
+  "c",
+  "a",
+]
+
+[expect]
+a = [
+  "a",
+  # about c
+  "c",
+]
+
+== should keep a heading set off by a blank line at the top ==
+a = [
+  # heading
+
+  "c",
+  "a",
+]
+
+[expect]
+a = [
+  # heading
+
+  "a",
+  "c",
+]
+
+== should split a heading from the comments describing the first value ==
+a = [
+  # heading
+
+  # about c
+  "c",
+  # about a
+  "a",
+]
+
+[expect]
+a = [
+  # heading
+
+  # about a
+  "a",
+  # about c
+  "c",
+]
+
+== should leave the comments before the closing bracket where they are ==
+a = [
+  "c",
+  "a",
+  # that is all
+]
+
+[expect]
+a = [
+  "a",
+  "c",
+  # that is all
+]
+
+== should leave a comment after the opening bracket where it is ==
+a = [ # about the array
+  "c",
+  "a",
+]
+
+[expect]
+a = [ # about the array
+  "a",
+  "c",
+]
+
+== should carry a comment written mid-run with its value ==
+a = [
+  "b",
+  # about c
+  "c",
+  "a",
+]
+
+[expect]
+a = [
+  "a",
+  "b",
+  # about c
+  "c",
+]
+
+== should treat a comment starting a run as that run's heading ==
+a = [
+  "d", # about d
+  "c",
+
+  # heads the second run
+  "b",
+  "a",
+]
+
+[expect]
+a = [
+  "c",
+  "d", # about d
+
+  # heads the second run
+  "a",
+  "b",
+]

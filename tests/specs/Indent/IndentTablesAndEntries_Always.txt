@@ -1,0 +1,12 @@
+~~ indentTables: always, indentEntries: always ~~
+== should indent entries a level in from their table ==
+[a]
+key = 1
+[a.b]
+key = 2
+
+[expect]
+[a]
+  key = 1
+  [a.b]
+    key = 2

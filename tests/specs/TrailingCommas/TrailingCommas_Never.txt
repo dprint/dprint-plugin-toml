@@ -1,0 +1,84 @@
+~~ trailingCommas: never ~~
+== should not write a trailing comma in an array ==
+a = [
+  1,
+  2,
+]
+
+[expect]
+a = [
+  1,
+  2
+]
+
+== should not write a trailing comma in a multi-line inline table ==
+a = {
+  b = 1,
+  c = 2,
+}
+
+[expect]
+a = {
+  b = 1,
+  c = 2
+}
+
+== should drop the trailing comma but keep a trailing comment ==
+a = [
+  1, # one
+  2, # two
+]
+
+[expect]
+a = [
+  1, # one
+  2 # two
+]
+
+== should drop the trailing comma before a comment on its own line ==
+a = [
+  1,
+  2,
+  # done
+]
+
+[expect]
+a = [
+  1,
+  2
+  # done
+]
+
+== should drop the trailing comma in a multi-line inline table with comments ==
+a = {
+  b = 1, # one
+  c = 2, # two
+  # done
+}
+
+[expect]
+a = {
+  b = 1, # one
+  c = 2 # two
+  # done
+}
+
+== should drop the trailing comma after a value carrying a comment above it ==
+a = [
+  1,
+  # about two
+  2,
+]
+
+[expect]
+a = [
+  1,
+  # about two
+  2
+]
+
+== should leave a single-line array alone ==
+a = [1, 2] # after
+
+[expect]
+a = [1, 2] # after

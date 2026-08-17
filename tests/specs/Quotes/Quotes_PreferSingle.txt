@@ -1,0 +1,18 @@
+~~ quoteStyle: preferSingle ~~
+== should use a single quote where no escape is needed ==
+a = "hello"
+b = ["a", 'b']
+c = ""
+
+[expect]
+a = 'hello'
+b = ['a', 'b']
+c = ''
+
+== should keep a string that would need escaping ==
+a = "line\nbreak"
+b = "it's"
+
+[expect]
+a = "line\nbreak"
+b = "it's"

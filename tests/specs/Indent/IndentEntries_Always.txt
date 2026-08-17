@@ -1,0 +1,16 @@
+~~ indentEntries: always ~~
+== should indent the entries of a table but not those above the first one ==
+top = 1
+
+[a]
+key = 1
+# comment
+other = 2
+
+[expect]
+top = 1
+
+[a]
+  key = 1
+  # comment
+  other = 2

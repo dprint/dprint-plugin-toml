@@ -1,0 +1,98 @@
+-- Cargo.toml --
+== should carry a dependency comment with its entry ==
+[dependencies]
+zed = "1"
+# about anyhow
+anyhow = "1"
+
+[expect]
+[dependencies]
+# about anyhow
+anyhow = "1"
+zed = "1"
+
+== should move a comment flush against the first dependency with that entry ==
+[dependencies]
+# about zed
+zed = "1"
+anyhow = "1"
+
+[expect]
+[dependencies]
+anyhow = "1"
+# about zed
+zed = "1"
+
+== should keep a comment starting a group at the top of that group ==
+[dependencies]
+anyhow = "1"
+
+# exts
+zed = "1"
+beta = "1"
+
+[expect]
+[dependencies]
+anyhow = "1"
+
+# exts
+beta = "1"
+zed = "1"
+
+== should split a group heading from a comment about the first entry ==
+[dependencies]
+# exts
+
+# about zed
+zed = "1"
+# about beta
+beta = "1"
+
+[expect]
+[dependencies]
+# exts
+
+# about beta
+beta = "1"
+# about zed
+zed = "1"
+
+== should carry comments with package entries ==
+[package]
+edition = "2021" # the edition
+# about the name
+name = "a"
+version = "1"
+
+[expect]
+[package]
+# about the name
+name = "a"
+version = "1"
+edition = "2021" # the edition
+
+== should leave a comment after the last entry of a section alone ==
+[dependencies]
+zed = "1"
+anyhow = "1"
+# that is all
+
+[expect]
+[dependencies]
+anyhow = "1"
+zed = "1"
+# that is all
+
+== should keep a trailing comment on a members entry ==
+[workspace]
+members = [
+  "z", # about z
+  "a",
+]
+
+[expect]
+[workspace]
+members = [
+  "a",
+  "z", # about z
+]

@@ -119,7 +119,7 @@ impl<'a> Parser<'a> {
   // ---- comments ----
 
   /// Parses a comment, which runs to the end of the line. The terminating newline is left alone.
-  fn parse_comment(&mut self, blank_line_before: bool) -> Comment<'a> {
+  fn parse_comment(&mut self, blank_line_before: bool, indent_in_source: usize) -> Comment<'a> {
     let start = self.pos;
     while let Some(c) = self.peek() {
       if c == '\n' || c == '\r' {
@@ -132,6 +132,7 @@ impl<'a> Parser<'a> {
       // take Unicode whitespace such as a no-break space, which is legitimate comment content
       text: self.text[start..self.pos].trim_end_matches([' ', '\t']),
       blank_line_before,
+      indent_in_source,
     }
   }
 
@@ -139,7 +140,7 @@ impl<'a> Parser<'a> {
   fn parse_trailing_comment(&mut self) -> Option<Comment<'a>> {
     self.skip_spaces();
     if self.peek() == Some('#') {
-      Some(self.parse_comment(false))
+      Some(self.parse_comment(false, 0))
     } else {
       None
     }
@@ -151,7 +152,11 @@ impl<'a> Parser<'a> {
     let mut items = Vec::new();
     let mut newlines = 0usize;
     loop {
+      // the whitespace skipped here is what precedes the item on its own line, since every path
+      // that doesn't finish a line comes back around to the top of the loop
+      let line_start = self.pos;
       self.skip_spaces();
+      let indent_in_source = self.pos - line_start;
       if self.is_eof() {
         break;
       }
@@ -169,12 +174,12 @@ impl<'a> Parser<'a> {
 
       match self.peek() {
         Some('#') => {
-          items.push(RootItem::Comment(self.parse_comment(blank_line_before)));
+          items.push(RootItem::Comment(self.parse_comment(blank_line_before, indent_in_source)));
           continue;
         }
-        Some('[') => items.push(RootItem::TableHeader(self.parse_table_header(blank_line_before)?)),
+        Some('[') => items.push(RootItem::TableHeader(self.parse_table_header(blank_line_before, indent_in_source)?)),
         _ => {
-          let mut entry = self.parse_entry(blank_line_before, Vec::new())?;
+          let mut entry = self.parse_entry(blank_line_before, Vec::new(), indent_in_source)?;
           entry.trailing_comment = self.parse_trailing_comment();
           items.push(RootItem::Entry(entry));
         }
@@ -188,7 +193,7 @@ impl<'a> Parser<'a> {
     Ok(Root { items })
   }
 
-  fn parse_table_header(&mut self, blank_line_before: bool) -> Result<TableHeader<'a>, SyntaxError> {
+  fn parse_table_header(&mut self, blank_line_before: bool, indent_in_source: usize) -> Result<TableHeader<'a>, SyntaxError> {
     self.bump(); // '['
     let is_array_of_tables = self.peek() == Some('[');
     if is_array_of_tables {
@@ -210,10 +215,11 @@ impl<'a> Parser<'a> {
       is_array_of_tables,
       blank_line_before,
       trailing_comment: self.parse_trailing_comment(),
+      indent_in_source,
     })
   }
 
-  fn parse_entry(&mut self, blank_line_before: bool, leading_comments: Vec<Comment<'a>>) -> Result<Entry<'a>, SyntaxError> {
+  fn parse_entry(&mut self, blank_line_before: bool, leading_comments: Vec<Comment<'a>>, indent_in_source: usize) -> Result<Entry<'a>, SyntaxError> {
     let key = self.parse_key()?;
     self.skip_spaces();
     if self.peek() != Some('=') {
@@ -229,6 +235,7 @@ impl<'a> Parser<'a> {
       blank_line_before,
       trailing_comment: None, // filled in by the caller, which knows where the line ends
       leading_comments,
+      indent_in_source,
     })
   }
 
@@ -486,7 +493,7 @@ impl<'a> Parser<'a> {
         }
         Some('#') => {
           let has_preceding = !values.is_empty() || !pending_comments.is_empty() || comment_after_open.is_some();
-          let comment = self.parse_comment(has_preceding && newlines >= 2);
+          let comment = self.parse_comment(has_preceding && newlines >= 2, 0);
           pending_comments.push(comment);
           newlines = 0;
           continue;
@@ -579,7 +586,7 @@ impl<'a> Parser<'a> {
         }
         Some('#') => {
           let has_preceding = !entries.is_empty() || !pending_comments.is_empty() || comment_after_open.is_some();
-          let comment = self.parse_comment(has_preceding && newlines >= 2);
+          let comment = self.parse_comment(has_preceding && newlines >= 2, 0);
           pending_comments.push(comment);
           newlines = 0;
           continue;
@@ -609,7 +616,9 @@ impl<'a> Parser<'a> {
       // measured after any leading comments, so it means a blank between them and the entry
       let blank_line_before = newlines >= 2;
       newlines = 0;
-      let mut entry = self.parse_entry(blank_line_before, std::mem::take(&mut pending_comments))?;
+      // an entry within an inline table is never indented on its own, so its source indent is of
+      // no interest
+      let mut entry = self.parse_entry(blank_line_before, std::mem::take(&mut pending_comments), 0)?;
 
       let mut trailing_comment = self.parse_trailing_comment();
       self.skip_spaces();

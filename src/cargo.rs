@@ -2,6 +2,10 @@ use std::cmp::Ordering;
 use std::path::Path;
 
 use crate::ast::*;
+use crate::sorting::section_end;
+use crate::sorting::sort_root_entries;
+use crate::sorting::sort_with_comments;
+use crate::sorting::value_sort_key;
 
 pub fn is_cargo_toml_file(file_path: &Path) -> bool {
   // don't need to worry about different casing because Cargo.toml will
@@ -47,8 +51,8 @@ pub fn apply_cargo_toml_conventions(root: &mut Root) {
         let section = section_of(header);
         let end = section_end(&root.items, index + 1);
         match section {
-          Section::Package => sort_section(&mut root.items, index + 1, end, &sort_cargo_package_section),
-          Section::Dependencies => sort_section(&mut root.items, index + 1, end, &|left, right| entry_sort_key(left).cmp(entry_sort_key(right))),
+          Section::Package => sort_root_entries(&mut root.items, index + 1, end, &sort_cargo_package_section),
+          Section::Dependencies => sort_root_entries(&mut root.items, index + 1, end, &|left, right| entry_sort_key(left).cmp(entry_sort_key(right))),
           Section::Workspace | Section::Other => {}
         }
         last_header = section;
@@ -68,20 +72,11 @@ pub fn apply_cargo_toml_conventions(root: &mut Root) {
   }
 }
 
-/// The index just past the last item belonging to the section starting at `start`, which runs until
-/// the next table header.
-fn section_end(items: &[RootItem], start: usize) -> usize {
-  items[start..]
-    .iter()
-    .position(RootItem::is_table_header)
-    .map(|i| start + i)
-    .unwrap_or(items.len())
-}
-
 /// The name an entry sorts under. Only the first segment of a dotted key is used, so that
-/// `serde.workspace` sorts beside `serde`.
+/// `serde.workspace` sorts beside `serde`, and the quotes around a quoted segment are ignored, so
+/// that `"serde"` sorts beside `serde` rather than under the quote character.
 fn entry_sort_key<'a>(entry: &'a Entry<'_>) -> &'a str {
-  entry.key.first.text
+  entry.key.first.unquoted_text()
 }
 
 fn sort_cargo_package_section(left: &Entry, right: &Entry) -> Ordering {
@@ -113,143 +108,8 @@ fn sort_workspace_members(entry: &mut Entry) {
   if !all_strings {
     return;
   }
-  let mut units = array
-    .values
-    .drain(..)
-    .map(|mut value| Unit {
-      leading_blank: value.leading_comments.first().map(|c| c.blank_line_before).unwrap_or(value.blank_line_before),
-      inner_blank: !value.leading_comments.is_empty() && value.blank_line_before,
-      starts_group: value.blank_line_before || value.leading_comments.iter().any(|c| c.blank_line_before),
-      leading_comments: std::mem::take(&mut value.leading_comments),
-      value,
-    })
-    .collect::<Vec<_>>();
-  sort_units(&mut units, |left, right| scalar_text(&left.value).cmp(scalar_text(&right.value)));
-  array.values = units
-    .into_iter()
-    .map(|mut unit| {
-      match unit.leading_comments.first_mut() {
-        Some(first) => {
-          first.blank_line_before = unit.leading_blank;
-          unit.value.blank_line_before = unit.inner_blank;
-        }
-        None => unit.value.blank_line_before = unit.leading_blank,
-      }
-      ArrayValue {
-        leading_comments: unit.leading_comments,
-        ..unit.value
-      }
-    })
-    .collect();
-}
-
-fn scalar_text<'a>(value: &'a Value<'_>) -> &'a str {
-  match &value.kind {
-    ValueKind::Scalar(text) => text,
-    // the all-strings guard admits nothing else
-    _ => "",
-  }
-}
-
-/// One sortable thing along with the comments written above it.
-struct Unit<'a, T> {
-  leading_comments: Vec<Comment<'a>>,
-  /// Whether a blank line is rendered above this unit's first element.
-  leading_blank: bool,
-  /// Whether a blank line is rendered between this unit's comments and the item itself. Only
-  /// meaningful when the unit has comments.
-  inner_blank: bool,
-  /// Whether a blank line appears anywhere between the previous item and this one, which the
-  /// author uses to divide a section into groups. It may sit either above this unit's comments or
-  /// between them and the item itself.
-  starts_group: bool,
-  value: T,
-}
-
-/// Sorts the entries of `items[start..end]`, keeping each entry's own comments with it.
-fn sort_section(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl Fn(&Entry, &Entry) -> Ordering) {
-  // Split the section into one unit per entry, each carrying the comments written above it. Any
-  // comments after the final entry belong to no entry and stay where they are.
-  let mut units: Vec<Unit<Entry>> = Vec::new();
-  let mut pending: Vec<Comment> = Vec::new();
-  let mut trailing: Vec<Comment> = Vec::new();
-  for item in items.drain(start..end) {
-    match item {
-      RootItem::Comment(comment) => pending.push(comment),
-      RootItem::Entry(entry) => units.push(Unit {
-        leading_blank: pending.first().map(|c| c.blank_line_before).unwrap_or(entry.blank_line_before),
-        inner_blank: !pending.is_empty() && entry.blank_line_before,
-        starts_group: entry.blank_line_before || pending.iter().any(|c| c.blank_line_before),
-        leading_comments: std::mem::take(&mut pending),
-        value: entry,
-      }),
-      // a section runs up to the next header, so nothing else can appear in it
-      RootItem::TableHeader(_) => unreachable!(),
-    }
-  }
-  trailing.append(&mut pending);
-
-  sort_units(&mut units, |left, right| cmp(left, right));
-
-  let sorted = units
-    .into_iter()
-    .flat_map(|unit| {
-      let leading_blank = unit.leading_blank;
-      let mut entry = unit.value;
-      let mut items = Vec::with_capacity(unit.leading_comments.len() + 1);
-      let mut comments = unit.leading_comments.into_iter();
-      match comments.next() {
-        Some(mut first) => {
-          first.blank_line_before = leading_blank;
-          items.push(RootItem::Comment(first));
-          items.extend(comments.map(RootItem::Comment));
-          entry.blank_line_before = unit.inner_blank;
-        }
-        None => entry.blank_line_before = leading_blank,
-      }
-      items.push(RootItem::Entry(entry));
-      items
-    })
-    .chain(trailing.into_iter().map(RootItem::Comment))
-    .collect::<Vec<_>>();
-  items.splice(start..start, sorted);
-}
-
-/// Sorts `units` in place, treating a blank line as a divider the author put there deliberately:
-/// each run between blank lines is sorted on its own and runs never move past each other.
-///
-/// The comments above a run's first entry are treated as belonging to the run rather than to that
-/// entry, so a heading like `# exts` stays at the top of its run instead of being carried off to
-/// wherever its entry happens to sort.
-fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
-  let mut group_start = 0;
-  while group_start < units.len() {
-    let mut group_end = group_start + 1;
-    while group_end < units.len() && !units[group_end].starts_group {
-      group_end += 1;
-    }
-
-    let group = &mut units[group_start..group_end];
-    // The group's leading comments belong to the group rather than to the entry they sat above, so
-    // they stay at its top. Any blank line beneath them is part of that heading and travels with it.
-    let group_comments = std::mem::take(&mut group[0].leading_comments);
-    let leading_blank = group[0].leading_blank;
-    let inner_blank = std::mem::replace(&mut group[0].inner_blank, false);
-
-    group.sort_by(|left, right| cmp(&left.value, &right.value));
-
-    for unit in group.iter_mut() {
-      unit.leading_blank = false;
-    }
-    let head = &mut group[0];
-    match head.leading_comments.first_mut() {
-      // the blank now separates the group's heading from the comments of whichever entry sorted first
-      Some(first) => first.blank_line_before = inner_blank,
-      None => head.inner_blank = inner_blank,
-    }
-    head.leading_comments.splice(0..0, group_comments);
-    head.leading_blank = leading_blank;
-
-    group_start = group_end;
-  }
+  // Sorted by contents rather than by the text as written: the quote a member happens to be
+  // written with is not part of its name, and `quoteStyle` may go on to rewrite it anyway, which
+  // would leave the members looking unsorted.
+  sort_with_comments(&mut array.values, |left, right| value_sort_key(&left.value).cmp(&value_sort_key(&right.value)));
 }

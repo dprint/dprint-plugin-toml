@@ -1,0 +1,81 @@
+== should keep the indentation of a nested table ==
+[[list-entry]]
+key = 1
+
+  [list-entry.subtable]
+  key = 2
+
+[expect]
+[[list-entry]]
+key = 1
+
+  [list-entry.subtable]
+  key = 2
+
+== should not indent a nested table that was not indented ==
+[a]
+key = 1
+[a.b]
+key = 2
+
+[expect]
+[a]
+key = 1
+[a.b]
+key = 2
+
+== should normalize the indentation to the table's depth ==
+[a]
+key = 1
+      [a.b]
+      key = 2
+
+[expect]
+[a]
+key = 1
+  [a.b]
+  key = 2
+
+== should indent a comment with the table it introduces ==
+[a]
+key = 1
+
+# about b
+  [a.b]
+  key = 2
+
+[expect]
+[a]
+key = 1
+
+  # about b
+  [a.b]
+  key = 2
+
+== should leave a comment closing a section at that section's indent ==
+[a]
+key = 1
+
+  [a.b]
+  key = 2
+  # that's all
+
+[expect]
+[a]
+key = 1
+
+  [a.b]
+  key = 2
+  # that's all
+
+== should not indent beneath a table that is not an ancestor ==
+[a]
+key = 1
+  [b]
+  key = 2
+
+[expect]
+[a]
+key = 1
+[b]
+key = 2

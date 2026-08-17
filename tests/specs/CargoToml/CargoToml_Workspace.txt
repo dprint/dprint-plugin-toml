@@ -554,7 +554,7 @@ winres = "=0.1.12"
 codegen-units = 1
 incremental = true
 lto = true
-opt-level = 'z' # Optimize for size
+opt-level = "z" # Optimize for size
 
 # Build release with debug symbols: cargo build --profile=release-with-debug
 [profile.release-with-debug]
@@ -566,7 +566,7 @@ debug = true
 codegen-units = 1
 incremental = true
 lto = true
-opt-level = 'z' # Optimize for size
+opt-level = "z" # Optimize for size
 
 # Key generation is too slow on `debug`
 [profile.dev.package.num-bigint-dig]
@@ -724,8 +724,8 @@ members = [
 [expect]
 [workspace]
 members = [
-  # members
   "member1",
+  # members
   "member2",
 
   "asdf",
@@ -748,3 +748,11 @@ members = [
   "a",
   "z",
 ]
+
+== should sort members by contents rather than by the quote they are written with ==
+[workspace]
+members = ['zeta', "beta", 'alpha', "gamma"]
+
+[expect]
+[workspace]
+members = ["alpha", "beta", "gamma", "zeta"]

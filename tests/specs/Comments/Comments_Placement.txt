@@ -1,0 +1,100 @@
+== should keep a comment above a table header with it ==
+# about a
+[a]
+key = 1
+
+# about b
+
+[b]
+key = 2
+
+[expect]
+# about a
+[a]
+key = 1
+
+# about b
+
+[b]
+key = 2
+
+== should keep a trailing comment on a header and on an entry ==
+[a] # about a
+key = 1 # about key
+
+[expect]
+[a] # about a
+key = 1 # about key
+
+== should keep comments at the start and end of the file ==
+# first
+
+# second
+a = 1
+# last
+
+[expect]
+# first
+
+# second
+a = 1
+# last
+
+== should keep consecutive comment lines together ==
+# one
+# two
+# three
+a = 1
+
+[expect]
+# one
+# two
+# three
+a = 1
+
+== should keep a blank line between two comment blocks ==
+# one
+
+# two
+a = 1
+
+[expect]
+# one
+
+# two
+a = 1
+
+== should not treat a hash inside a string as a comment ==
+a = "# not a comment"
+b = 'also # not' # but this is
+
+[expect]
+a = "# not a comment"
+b = "also # not" # but this is
+
+== should keep a comment as the only content of a file ==
+# just this
+
+[expect]
+# just this
+
+== should keep a comment between two entries ==
+a = 1
+# between
+b = 2
+
+[expect]
+a = 1
+# between
+b = 2
+
+== should drop a blank line directly beneath a header but keep the comment ==
+[a]
+
+# note
+key = 1
+
+[expect]
+[a]
+# note
+key = 1
