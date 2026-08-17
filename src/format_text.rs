@@ -44,6 +44,10 @@ fn strip_bom(text: &str) -> &str {
 fn parse_and_process_node<'a>(file_path: &Path, text: &'a str, config: &Configuration) -> Result<Root<'a>, FormatError> {
   let mut root = parse(text)?;
 
+  crate::sorting::apply_sorting(&mut root, config);
+
+  // after the general sorting, so that a Cargo.toml keeps its conventional order rather than an
+  // alphabetical one
   if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
     cargo::apply_cargo_toml_conventions(&mut root);
   }

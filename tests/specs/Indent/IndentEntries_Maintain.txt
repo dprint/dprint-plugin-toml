@@ -1,0 +1,29 @@
+== should keep entries indented beneath their table ==
+[a]
+  key = 1
+  other = 2
+
+[expect]
+[a]
+  key = 1
+  other = 2
+
+== should indent an entry that a value written over several lines belongs to ==
+[a]
+  key = [
+    1,
+    2,
+  ]
+  text = '''
+line
+'''
+
+[expect]
+[a]
+  key = [
+    1,
+    2,
+  ]
+  text = '''
+line
+'''

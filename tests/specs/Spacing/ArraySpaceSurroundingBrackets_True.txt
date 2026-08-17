@@ -1,0 +1,22 @@
+~~ array.spaceSurroundingBrackets: true ~~
+== should pad a single-line array ==
+a = [1, 2]
+b = []
+c = { d = [1, 2], e = [] }
+
+[expect]
+a = [ 1, 2 ]
+b = []
+c = { d = [ 1, 2 ], e = [] }
+
+== should not pad a multi-line array ==
+a = [
+  1,
+  2,
+]
+
+[expect]
+a = [
+  1,
+  2,
+]

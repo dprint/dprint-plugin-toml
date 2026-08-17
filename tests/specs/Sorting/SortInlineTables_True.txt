@@ -1,0 +1,20 @@
+~~ sortInlineTables: true ~~
+== should sort the entries of an inline table ==
+a = { c = 1, a = 2, b = 3 }
+
+[expect]
+a = { a = 2, b = 3, c = 1 }
+
+== should sort a nested inline table ==
+a = { b = { d = 1, c = 2 }, a = 3 }
+
+[expect]
+a = { a = 3, b = { c = 2, d = 1 } }
+
+== should not sort the entries of a table ==
+b = 1
+a = 2
+
+[expect]
+b = 1
+a = 2

@@ -1,0 +1,14 @@
+~~ spaceSurroundingEquals: false ~~
+== should not write a space around the equals ==
+a = 1
+b.c = 2
+
+[table]
+d = { e = 1 }
+
+[expect]
+a=1
+b.c=2
+
+[table]
+d={ e=1 }

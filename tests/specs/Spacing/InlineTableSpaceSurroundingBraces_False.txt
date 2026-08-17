@@ -1,0 +1,8 @@
+~~ inlineTable.spaceSurroundingBraces: false ~~
+== should not pad an inline table ==
+a = { b = 1, c = 2 }
+d = {}
+
+[expect]
+a = {b = 1, c = 2}
+d = {}

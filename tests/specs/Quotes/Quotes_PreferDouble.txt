@@ -1,0 +1,31 @@
+== should use a double quote where no escape is needed ==
+a = 'hello'
+b = ['a', "b"]
+c = { d = 'e' }
+f = ''
+
+[expect]
+a = "hello"
+b = ["a", "b"]
+c = { d = "e" }
+f = ""
+
+== should keep a string that would need escaping ==
+a = 'C:\path'
+b = 'it is "quoted"'
+
+[expect]
+a = 'C:\path'
+b = 'it is "quoted"'
+
+== should leave keys and multi-line strings alone ==
+'key' = 'value'
+a = '''
+text
+'''
+
+[expect]
+'key' = "value"
+a = '''
+text
+'''

@@ -1,0 +1,48 @@
+~~ indentTables: always ~~
+== should indent subtables by their depth ==
+[a]
+key = 1
+[a.b]
+key = 2
+[a.b.c]
+key = 3
+[other]
+key = 4
+
+[expect]
+[a]
+key = 1
+  [a.b]
+  key = 2
+    [a.b.c]
+    key = 3
+[other]
+key = 4
+
+== should indent beneath an array of tables ==
+[[a]]
+key = 1
+[a.b]
+key = 2
+[[a]]
+key = 3
+
+[expect]
+[[a]]
+key = 1
+  [a.b]
+  key = 2
+[[a]]
+key = 3
+
+== should ignore quoting when matching a table to its parent ==
+[a]
+key = 1
+[a."b"]
+key = 2
+
+[expect]
+[a]
+key = 1
+  [a."b"]
+  key = 2

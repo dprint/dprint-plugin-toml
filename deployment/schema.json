@@ -33,6 +33,147 @@
         "description": "Uses the system standard (ex. crlf on Windows)."
       }]
     },
+    "quoteStyle": {
+      "description": "Which quote to use for a single-line string. A string is only rewritten when doing so doesn't require adding an escape, since a basic string and a literal string spell a backslash differently. Keys are left as written.",
+      "type": "string",
+      "default": "preferDouble",
+      "oneOf": [{
+        "const": "maintain",
+        "description": "Keeps the quote the string was written with."
+      }, {
+        "const": "preferDouble",
+        "description": "Uses a double quote when doing so doesn't require adding an escape (ex. `'a'` becomes `\"a\"`)."
+      }, {
+        "const": "preferSingle",
+        "description": "Uses a single quote when doing so doesn't require adding an escape (ex. `\"a\"` becomes `'a'`)."
+      }]
+    },
+    "indentTables": {
+      "description": "Whether to indent a table header that is a subtable of the header above it.",
+      "type": "string",
+      "default": "maintain",
+      "oneOf": [{
+        "const": "maintain",
+        "description": "Indents a table header that was written indented and leaves the rest at the margin."
+      }, {
+        "const": "always",
+        "description": "Indents every table header by how many of the headers above it name one of its ancestors."
+      }, {
+        "const": "never",
+        "description": "Writes every table header at the margin."
+      }]
+    },
+    "indentEntries": {
+      "description": "Whether to indent the entries of a table a level in from its header. Entries written above the first table header are never indented.",
+      "type": "string",
+      "default": "maintain",
+      "oneOf": [{
+        "const": "maintain",
+        "description": "Indents the entries that were written further in than their table header."
+      }, {
+        "const": "always",
+        "description": "Indents every table's entries."
+      }, {
+        "const": "never",
+        "description": "Writes a table's entries at the same indent as its header."
+      }]
+    },
+    "trailingCommas": {
+      "description": "When to write a trailing comma after the last value of an array or inline table.",
+      "type": "string",
+      "default": "onlyMultiLine",
+      "oneOf": [{
+        "const": "onlyMultiLine",
+        "description": "Writes one only when the array or inline table is written over multiple lines."
+      }, {
+        "const": "never",
+        "description": "Never writes one."
+      }]
+    },
+    "spaceSurroundingEquals": {
+      "description": "Whether to write a space on either side of the `=` of a key/value pair.",
+      "type": "boolean",
+      "default": true,
+      "oneOf": [{
+        "const": true,
+        "description": "ex. `key = 1`"
+      }, {
+        "const": false,
+        "description": "ex. `key=1`"
+      }]
+    },
+    "sortKeys": {
+      "description": "Whether to alphabetically sort the entries of each table. Entries separated by a blank line are sorted within their own run, and table headers are never moved.",
+      "type": "boolean",
+      "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "sortArrays": {
+      "description": "Whether to alphabetically sort the values of an array. Values separated by a blank line are sorted within their own run, and an array holding an array or inline table is left alone. Note that this changes the meaning of a document whose array order is significant.",
+      "type": "boolean",
+      "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "sortInlineTables": {
+      "description": "Whether to alphabetically sort the entries of an inline table.",
+      "type": "boolean",
+      "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "preferSingleLine": {
+      "description": "Whether to collapse an array or inline table written over several lines onto a single line when it fits. A comment written within one keeps it expanded.",
+      "type": "boolean",
+      "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": ""
+      }, {
+        "const": false,
+        "description": ""
+      }]
+    },
+    "array.spaceSurroundingBrackets": {
+      "description": "Whether to write a space inside the brackets of a single-line array.",
+      "type": "boolean",
+      "default": false,
+      "oneOf": [{
+        "const": true,
+        "description": "ex. `[ 1, 2 ]`"
+      }, {
+        "const": false,
+        "description": "ex. `[1, 2]`"
+      }]
+    },
+    "inlineTable.spaceSurroundingBraces": {
+      "description": "Whether to write a space inside the braces of a single-line inline table.",
+      "type": "boolean",
+      "default": true,
+      "oneOf": [{
+        "const": true,
+        "description": "ex. `{ a = 1 }`"
+      }, {
+        "const": false,
+        "description": "ex. `{a = 1}`"
+      }]
+    },
     "comment.forceLeadingSpace": {
       "description": "Whether to force a leading space in a comment.",
       "type": "boolean",
@@ -78,6 +219,45 @@
     },
     "newLineKind": {
       "$ref": "#/definitions/newLineKind"
+    },
+    "quoteStyle": {
+      "$ref": "#/definitions/quoteStyle"
+    },
+    "indentTables": {
+      "$ref": "#/definitions/indentTables"
+    },
+    "indentEntries": {
+      "$ref": "#/definitions/indentEntries"
+    },
+    "trailingCommas": {
+      "$ref": "#/definitions/trailingCommas"
+    },
+    "spaceSurroundingEquals": {
+      "$ref": "#/definitions/spaceSurroundingEquals"
+    },
+    "sortKeys": {
+      "$ref": "#/definitions/sortKeys"
+    },
+    "sortArrays": {
+      "$ref": "#/definitions/sortArrays"
+    },
+    "sortInlineTables": {
+      "$ref": "#/definitions/sortInlineTables"
+    },
+    "preferSingleLine": {
+      "$ref": "#/definitions/preferSingleLine"
+    },
+    "array.preferSingleLine": {
+      "$ref": "#/definitions/preferSingleLine"
+    },
+    "array.spaceSurroundingBrackets": {
+      "$ref": "#/definitions/array.spaceSurroundingBrackets"
+    },
+    "inlineTable.preferSingleLine": {
+      "$ref": "#/definitions/preferSingleLine"
+    },
+    "inlineTable.spaceSurroundingBraces": {
+      "$ref": "#/definitions/inlineTable.spaceSurroundingBraces"
     },
     "comment.forceLeadingSpace": {
       "$ref": "#/definitions/comment.forceLeadingSpace"

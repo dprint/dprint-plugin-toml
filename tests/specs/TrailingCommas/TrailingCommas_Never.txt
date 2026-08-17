@@ -1,0 +1,24 @@
+~~ trailingCommas: never ~~
+== should not write a trailing comma in an array ==
+a = [
+  1,
+  2,
+]
+
+[expect]
+a = [
+  1,
+  2
+]
+
+== should not write a trailing comma in a multi-line inline table ==
+a = {
+  b = 1,
+  c = 2,
+}
+
+[expect]
+a = {
+  b = 1,
+  c = 2
+}

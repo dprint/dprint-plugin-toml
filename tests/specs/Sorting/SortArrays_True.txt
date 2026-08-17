@@ -1,0 +1,44 @@
+~~ sortArrays: true ~~
+== should sort the values of an array ==
+a = ["c", "a", "b"]
+b = [3, 1, 2]
+
+[expect]
+a = ["a", "b", "c"]
+b = [1, 2, 3]
+
+== should sort by contents rather than by the quote a string is written with ==
+a = ['c', "a", 'b']
+
+[expect]
+a = ["a", "b", "c"]
+
+== should sort within a nested array ==
+a = [["c", "a"], ["b"]]
+
+[expect]
+a = [["a", "c"], ["b"]]
+
+== should leave an array holding a collection alone ==
+a = [{ b = 1 }, { a = 2 }]
+
+[expect]
+a = [{ b = 1 }, { a = 2 }]
+
+== should sort each run between blank lines on its own ==
+a = [
+  "d",
+  "c",
+
+  "b",
+  "a",
+]
+
+[expect]
+a = [
+  "c",
+  "d",
+
+  "a",
+  "b",
+]

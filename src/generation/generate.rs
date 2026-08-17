@@ -6,8 +6,12 @@ use std::rc::Rc;
 
 use super::Context;
 use crate::ast::*;
+use crate::configuration::Configuration;
+use crate::configuration::IndentKind;
+use crate::configuration::QuoteStyle;
+use crate::configuration::TrailingCommaKind;
 
-pub fn generate(root: &Root, config: &crate::configuration::Configuration) -> PrintItems {
+pub fn generate(root: &Root, config: &Configuration) -> PrintItems {
   let mut context = Context::new(config);
   let mut items = gen_root(root, &mut context);
   items.push_condition(if_true(
@@ -19,19 +23,94 @@ pub fn generate(root: &Root, config: &crate::configuration::Configuration) -> Pr
 }
 
 fn gen_root(root: &Root, context: &mut Context) -> PrintItems {
+  let indents = indent_levels(root, context.config);
   let mut items = PrintItems::new();
   let mut previous: Option<&RootItem> = None;
-  for item in &root.items {
+  for (i, item) in root.items.iter().enumerate() {
     if let Some(previous) = previous {
       items.push_signal(Signal::NewLine);
       if item.blank_line_before() && allow_blank_line(previous, item) {
         items.push_signal(Signal::NewLine);
       }
     }
-    items.extend(gen_root_item(item, context));
+    // the indent starts after the newline that precedes the item, so the writer sees an empty
+    // blank line rather than one padded out with the indentation of what follows it
+    items.extend(ir_helpers::with_indent_times(gen_root_item(item, context), indents[i]));
     previous = Some(item);
   }
   items
+}
+
+/// The indent level each root item is written at.
+///
+/// A table header's level is how many of the headers above it name one of its ancestors, so
+/// `[a.b]` beneath `[a]` sits one level in while `[a.b]` beneath nothing at all sits at the
+/// margin. A table's entries follow its header, one level further in when entries are indented.
+fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
+  let mut levels = vec![0u32; root.items.len()];
+  // the level a comment falls back to when it closes off its section rather than introducing the
+  // item beneath it
+  let mut section_levels = vec![0u32; root.items.len()];
+  // the headers enclosing the item being looked at, each naming an ancestor of the next
+  let mut open_tables: Vec<&Key> = Vec::new();
+  let mut table_level = 0;
+  let mut entry_level = 0;
+  let mut header_indent = None;
+
+  for (i, item) in root.items.iter().enumerate() {
+    match item {
+      RootItem::TableHeader(header) => {
+        while open_tables.last().is_some_and(|key| !key.is_strict_prefix_of(&header.key)) {
+          open_tables.pop();
+        }
+        let depth = open_tables.len() as u32;
+        open_tables.push(&header.key);
+        table_level = match config.indent_tables {
+          IndentKind::Always => depth,
+          IndentKind::Never => 0,
+          IndentKind::Maintain => {
+            if header.indent_in_source > 0 {
+              depth
+            } else {
+              0
+            }
+          }
+        };
+        header_indent = Some(header.indent_in_source);
+        entry_level = table_level + u32::from(config.indent_entries == IndentKind::Always);
+        levels[i] = table_level;
+      }
+      RootItem::Entry(entry) => {
+        // an entry above the first table header belongs to no table, so there is nothing for it
+        // to be indented beneath
+        let extra = match (header_indent, config.indent_entries) {
+          (None, _) | (Some(_), IndentKind::Never) => 0,
+          (Some(_), IndentKind::Always) => 1,
+          (Some(indent), IndentKind::Maintain) => u32::from(entry.indent_in_source > indent),
+        };
+        entry_level = table_level + extra;
+        levels[i] = entry_level;
+      }
+      RootItem::Comment(_) => {}
+    }
+    section_levels[i] = entry_level;
+  }
+
+  // A comment is written at the indent of the item it introduces, which is only known once that
+  // item has been reached, so the comments are filled in walking back through the file.
+  let mut following: Option<(bool, u32)> = None;
+  for i in (0..root.items.len()).rev() {
+    if matches!(root.items[i], RootItem::Comment(_)) {
+      levels[i] = match following {
+        Some((false, level)) => level,
+        // a blank line beneath it, or the end of the file, means it belongs to what came before
+        _ => section_levels[i],
+      };
+    }
+    following = Some((root.items[i].blank_line_before(), levels[i]));
+  }
+
+  levels
 }
 
 /// A blank line is kept everywhere except directly beneath a table header, where it only separates
@@ -70,7 +149,7 @@ fn gen_entry(entry: &Entry, context: &mut Context) -> PrintItems {
 
 fn gen_entry_without_trailing_comment(entry: &Entry, context: &mut Context) -> PrintItems {
   let mut items = gen_key(&entry.key);
-  items.push_sc(sc!(" = "));
+  items.push_sc(if context.config.space_surrounding_equals { sc!(" = ") } else { sc!("=") });
   items.extend(gen_value(&entry.value, context));
   items
 }
@@ -90,7 +169,10 @@ fn gen_key(key: &Key) -> PrintItems {
 /// Spec: Values must be either String, Integer, Float, Boolean, DateTimes, Array, InlineTable
 fn gen_value(value: &Value, context: &mut Context) -> PrintItems {
   match &value.kind {
-    ValueKind::Scalar(text) => ir_helpers::gen_from_string(text),
+    ValueKind::Scalar(text) => match requoted_string(text, context.config.quote_style) {
+      Some(text) => ir_helpers::gen_from_string(&text),
+      None => ir_helpers::gen_from_string(text),
+    },
     ValueKind::MultiLineString(text) => {
       let mut items = PrintItems::new();
       items.push_force_current_line_indentation();
@@ -100,6 +182,31 @@ fn gen_value(value: &Value, context: &mut Context) -> PrintItems {
     ValueKind::Array(array) => gen_array(array, context),
     ValueKind::InlineTable(table) => gen_inline_table(table, context),
   }
+}
+
+/// The text of a single-line string rewritten with the preferred quote, or `None` when it is
+/// already written with it or cannot be rewritten.
+///
+/// A basic string reads a backslash as beginning an escape where a literal string reads it as
+/// itself, so the two spell the same value differently as soon as one appears. Rewriting such a
+/// string means rewriting its contents, and rewriting one that already holds the preferred quote
+/// means escaping that quote — neither of which is done here. The point is to settle on one quote
+/// wherever it costs nothing, not to make every string look the same.
+fn requoted_string(text: &str, style: QuoteStyle) -> Option<String> {
+  let (from, to) = match style {
+    QuoteStyle::Maintain => return None,
+    QuoteStyle::PreferDouble => ('\'', '"'),
+    QuoteStyle::PreferSingle => ('"', '\''),
+  };
+  let inner = text.strip_prefix(from)?.strip_suffix(from)?;
+  if inner.contains('\\') || inner.contains(to) {
+    return None;
+  }
+  let mut result = String::with_capacity(text.len());
+  result.push(to);
+  result.push_str(inner);
+  result.push(to);
+  Some(result)
 }
 
 // ---- arrays ----
@@ -119,6 +226,11 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
       },
       |context| {
         let mut items = PrintItems::new();
+        // padding is only written when nothing else is going to end the line first
+        let pad = context.config.array_space_surrounding_brackets && !array.values.is_empty() && array.comment_after_open.is_none();
+        if pad {
+          items.push_sc(sc!(" "));
+        }
         for (i, value) in array.values.iter().enumerate() {
           // space away from the previous value, unless its comment already ended that line
           if i > 0 && array.values[i - 1].trailing_comment.is_none() {
@@ -138,13 +250,17 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
             items.extend(gen_comment(comment, context));
           }
         }
+        if pad && array.values.last().is_some_and(|value| value.trailing_comment.is_none()) {
+          items.push_sc(sc!(" "));
+        }
         items
       },
       context,
     );
   }
 
-  let force_use_new_lines = array.force_use_new_lines();
+  let force_use_new_lines = array.force_use_new_lines(context.config);
+  let space_within_single_line = context.config.array_space_surrounding_brackets;
   gen_surrounded(
     SurroundedParams {
       open: sc!("["),
@@ -156,7 +272,7 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
       if array.values.is_empty() {
         return if force_use_new_lines { Signal::NewLine.into() } else { PrintItems::new() };
       }
-      gen_separated(&array.values, force_use_new_lines, context)
+      gen_separated(&array.values, force_use_new_lines, space_within_single_line, context)
     },
     context,
   )
@@ -174,18 +290,23 @@ fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
   //
   // Nothing within a table that has to stay on one line may break, so a table nested in one is
   // generated on a single line however the author wrote it.
-  if !context.is_in_single_line_table() && (table.multi_line_in_source || table.has_own_comment()) {
+  if !context.is_in_single_line_table() && table.force_use_new_lines(context.config) {
     return gen_multi_line_inline_table(table, context);
   }
 
+  let pad = context.config.inline_table_space_surrounding_braces && !table.entries.is_empty();
   let mut items = PrintItems::new();
   context.with_single_line_table(|context| {
     items.push_sc(sc!("{"));
     for (i, entry) in table.entries.iter().enumerate() {
-      items.push_sc(if i > 0 { sc!(", ") } else { sc!(" ") });
+      if i > 0 {
+        items.push_sc(sc!(", "));
+      } else if pad {
+        items.push_sc(sc!(" "));
+      }
       items.extend(gen_entry_without_trailing_comment(entry, context));
     }
-    items.push_sc(if table.entries.is_empty() { sc!("}") } else { sc!(" }") });
+    items.push_sc(if pad { sc!(" }") } else { sc!("}") });
   });
 
   // Spec:
@@ -218,7 +339,7 @@ fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> Pr
       if table.entries.is_empty() {
         return Signal::NewLine.into();
       }
-      gen_separated(&table.entries, true, context)
+      gen_separated(&table.entries, true, false, context)
     },
     context,
   )
@@ -272,28 +393,34 @@ enum SeparatedItemValue<'a> {
   Entry(&'a Entry<'a>),
 }
 
-impl<'a> From<&'a ArrayValue<'a>> for SeparatedItem<'a> {
-  fn from(value: &'a ArrayValue<'a>) -> Self {
+/// Whether a value is written over several lines depends on the configuration, so this stands in
+/// for the `From` conversion the item would otherwise be built by.
+trait IntoSeparatedItem<'a> {
+  fn into_separated_item(self, config: &Configuration) -> SeparatedItem<'a>;
+}
+
+impl<'a> IntoSeparatedItem<'a> for &'a ArrayValue<'a> {
+  fn into_separated_item(self, config: &Configuration) -> SeparatedItem<'a> {
     SeparatedItem {
-      leading_comments: &value.leading_comments,
-      blank_line_before: value.blank_line_before,
-      trailing_comment: value.trailing_comment.as_ref(),
-      blank_line_before_item: blank_line_before_item(&value.leading_comments, value.blank_line_before),
-      is_known_multi_line: value.value.is_known_multi_line(),
-      entry: SeparatedItemValue::Value(&value.value),
+      leading_comments: &self.leading_comments,
+      blank_line_before: self.blank_line_before,
+      trailing_comment: self.trailing_comment.as_ref(),
+      blank_line_before_item: blank_line_before_item(&self.leading_comments, self.blank_line_before),
+      is_known_multi_line: self.value.is_known_multi_line(config),
+      entry: SeparatedItemValue::Value(&self.value),
     }
   }
 }
 
-impl<'a> From<&'a Entry<'a>> for SeparatedItem<'a> {
-  fn from(entry: &'a Entry<'a>) -> Self {
+impl<'a> IntoSeparatedItem<'a> for &'a Entry<'a> {
+  fn into_separated_item(self, config: &Configuration) -> SeparatedItem<'a> {
     SeparatedItem {
-      leading_comments: &entry.leading_comments,
-      blank_line_before: entry.blank_line_before,
-      trailing_comment: entry.trailing_comment.as_ref(),
-      blank_line_before_item: blank_line_before_item(&entry.leading_comments, entry.blank_line_before),
-      is_known_multi_line: entry.value.is_known_multi_line(),
-      entry: SeparatedItemValue::Entry(entry),
+      leading_comments: &self.leading_comments,
+      blank_line_before: self.blank_line_before,
+      trailing_comment: self.trailing_comment.as_ref(),
+      blank_line_before_item: blank_line_before_item(&self.leading_comments, self.blank_line_before),
+      is_known_multi_line: self.value.is_known_multi_line(config),
+      entry: SeparatedItemValue::Entry(self),
     }
   }
 }
@@ -308,11 +435,12 @@ fn blank_line_before_item(leading_comments: &[Comment<'_>], blank_line_before: b
 
 /// `items` is the array's values or the table's entries; each is turned into a [`SeparatedItem`]
 /// as it is reached rather than up front, so the whole run is never collected into a `Vec`.
-fn gen_separated<'a, T>(items: &'a [T], force_use_new_lines: bool, context: &mut Context) -> PrintItems
+fn gen_separated<'a, T>(items: &'a [T], force_use_new_lines: bool, space_within_single_line: bool, context: &mut Context) -> PrintItems
 where
-  &'a T: Into<SeparatedItem<'a>>,
+  &'a T: IntoSeparatedItem<'a>,
 {
   let indent_width = context.config.indent_width;
+  let trailing_commas = context.config.trailing_commas;
   ir_helpers::gen_separated_values(
     |is_multi_line_ref| {
       let count = items.len();
@@ -321,7 +449,7 @@ where
       // author asked for one, and the item may since have been moved by the Cargo.toml sorting,
       // which would leave any position taken from the source pointing at the wrong line.
       let mut line = 0;
-      for (i, item) in items.iter().map(Into::into).enumerate() {
+      for (i, item) in items.iter().map(|item| item.into_separated_item(context.config)).enumerate() {
         if i > 0 {
           line += if item.blank_line_before_item { 2 } else { 1 };
         }
@@ -330,9 +458,13 @@ where
           end_line: line,
         });
         let generated_comma = if i == count - 1 {
-          // todo: make this conditional based on config
-          let is_multi_line = is_multi_line_ref.create_resolver();
-          if_true("commaIfMultiLine", is_multi_line, ",".into()).into()
+          match trailing_commas {
+            TrailingCommaKind::Never => PrintItems::new(),
+            TrailingCommaKind::OnlyMultiLine => {
+              let is_multi_line = is_multi_line_ref.create_resolver();
+              if_true("commaIfMultiLine", is_multi_line, ",".into()).into()
+            }
+          }
         } else {
           ",".into()
         };
@@ -353,8 +485,8 @@ where
       force_use_new_lines,
       allow_blank_lines: true,
       single_line_options: SingleLineOptions {
-        space_at_start: false,
-        space_at_end: false,
+        space_at_start: space_within_single_line,
+        space_at_end: space_within_single_line,
         separator: Signal::SpaceOrNewLine.into(),
       },
       indent_width,
