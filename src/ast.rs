@@ -150,6 +150,41 @@ impl Value<'_> {
       ValueKind::InlineTable(table) => table.entries.iter().any(|e| e.value.contains_multi_line_string()),
     }
   }
+
+  /// Whether this value is written over more than one line however it is formatted.
+  ///
+  /// Telling a group this in advance saves it printing its values on the assumption that they fit
+  /// on one line only to find out otherwise, which for values nested inside one another it would
+  /// otherwise repeat at every level. It has to be certain, so an inline table the author wrote on
+  /// one line counts for nothing within it except a string, whose own newlines are kept wherever it
+  /// appears.
+  pub fn is_known_multi_line(&self) -> bool {
+    match &self.kind {
+      // a triple quoted string is only written over several lines if its contents are
+      ValueKind::MultiLineString(text) => text.contains('\n'),
+      ValueKind::Scalar(_) => false,
+      ValueKind::Array(array) => array.force_use_new_lines() || array.values.iter().any(|value| value.value.is_known_multi_line()),
+      ValueKind::InlineTable(table) => {
+        if table.multi_line_in_source || table.has_own_comment() {
+          true
+        } else {
+          // the table is printed on one line, collapsing any collection within it, so only a string
+          // that spans lines is left to break it
+          table.entries.iter().any(|entry| entry.value.contains_string_spanning_lines())
+        }
+      }
+    }
+  }
+
+  /// Whether a string whose contents span lines appears anywhere within this value.
+  fn contains_string_spanning_lines(&self) -> bool {
+    match &self.kind {
+      ValueKind::MultiLineString(text) => text.contains('\n'),
+      ValueKind::Scalar(_) => false,
+      ValueKind::Array(array) => array.values.iter().any(|value| value.value.contains_string_spanning_lines()),
+      ValueKind::InlineTable(table) => table.entries.iter().any(|entry| entry.value.contains_string_spanning_lines()),
+    }
+  }
 }
 
 #[derive(Debug, Clone)]

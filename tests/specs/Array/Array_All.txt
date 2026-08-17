@@ -85,3 +85,17 @@ c = [
 x
 """ },
 ]
+
+== should break up an array holding one the author had already broken up ==
+z = [[[
+  1,
+]]]
+
+[expect]
+z = [
+  [
+    [
+      1,
+    ],
+  ],
+]

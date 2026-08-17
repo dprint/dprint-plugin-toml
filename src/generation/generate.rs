@@ -262,6 +262,8 @@ struct SeparatedItem<'a> {
   trailing_comment: Option<&'a Comment<'a>>,
   /// Whether a blank line separates this whole item, comments included, from the one before it.
   blank_line_before_item: bool,
+  /// Whether the item is written over more than one line however it is formatted.
+  is_known_multi_line: bool,
   entry: SeparatedItemValue<'a>,
 }
 
@@ -277,6 +279,7 @@ impl<'a> From<&'a ArrayValue<'a>> for SeparatedItem<'a> {
       blank_line_before: value.blank_line_before,
       trailing_comment: value.trailing_comment.as_ref(),
       blank_line_before_item: blank_line_before_item(&value.leading_comments, value.blank_line_before),
+      is_known_multi_line: value.value.is_known_multi_line(),
       entry: SeparatedItemValue::Value(&value.value),
     }
   }
@@ -289,6 +292,7 @@ impl<'a> From<&'a Entry<'a>> for SeparatedItem<'a> {
       blank_line_before: entry.blank_line_before,
       trailing_comment: entry.trailing_comment.as_ref(),
       blank_line_before_item: blank_line_before_item(&entry.leading_comments, entry.blank_line_before),
+      is_known_multi_line: entry.value.is_known_multi_line(),
       entry: SeparatedItemValue::Entry(entry),
     }
   }
@@ -332,12 +336,14 @@ where
         } else {
           ",".into()
         };
+        let is_known_multi_line = item.is_known_multi_line;
         generated.push(ir_helpers::GeneratedValue {
           items: ir_helpers::new_line_group(gen_separated_item(item, generated_comma, context)),
           lines_span,
           // a value spanning several lines always breaks its group up, wherever it sits in it
           allow_inline_multi_line: false,
           allow_inline_single_line: false,
+          is_known_multi_line,
         });
       }
       generated
