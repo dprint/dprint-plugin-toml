@@ -730,3 +730,21 @@ members = [
 
   "asdf",
 ]
+
+== should keep a blank line under a members comment when sorting reorders it ==
+[workspace]
+members = [
+  # head
+
+  "z",
+  "a",
+]
+
+[expect]
+[workspace]
+members = [
+  # head
+
+  "a",
+  "z",
+]

@@ -2,13 +2,14 @@ use super::configuration::Configuration;
 use super::generation::generate;
 use crate::cargo;
 
+use crate::ast::Root;
 use crate::error::FormatError;
 use crate::error::ParseError;
+use crate::parser;
 
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::formatting::PrintOptions;
 use std::path::Path;
-use taplo::syntax::SyntaxNode;
 
 pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<Option<String>, FormatError> {
   let result = format_text_inner(file_path, text, config)?;
@@ -21,46 +22,64 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
 
 fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
   let text = strip_bom(text);
-  let node = parse_and_process_node(file_path, text, config)?;
+  let root = parse_and_process_node(file_path, text, config)?;
 
   Ok(dprint_core::formatting::format(
-    || generate(node, text, config),
+    || generate(&root, config),
     config_to_print_options(text, config),
   ))
 }
 
 #[cfg(feature = "tracing")]
 pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprint_core::formatting::TracingResult {
-  let node = parse_and_process_node(file_path, text, config).unwrap();
+  let root = parse_and_process_node(file_path, text, config).unwrap();
 
-  dprint_core::formatting::trace_printing(|| generate(node, text, config), config_to_print_options(text, config))
+  dprint_core::formatting::trace_printing(|| generate(&root, config), config_to_print_options(text, config))
 }
 
 fn strip_bom(text: &str) -> &str {
   text.strip_prefix("\u{FEFF}").unwrap_or(text)
 }
 
-fn parse_and_process_node(file_path: &Path, text: &str, config: &Configuration) -> Result<SyntaxNode, FormatError> {
-  let node = parse_taplo(text)?;
+fn parse_and_process_node<'a>(file_path: &Path, text: &'a str, config: &Configuration) -> Result<Root<'a>, FormatError> {
+  let mut root = parse(text)?;
 
-  Ok(if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
-    cargo::apply_cargo_toml_conventions(node)
-  } else {
-    node
+  if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
+    cargo::apply_cargo_toml_conventions(&mut root);
+  }
+  Ok(root)
+}
+
+fn parse(text: &str) -> Result<Root<'_>, ParseError> {
+  parser::parse(text).map_err(|err| {
+    let (start, end) = highlight_range(&err, text);
+    ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
+      Some((start, end)),
+      &err.message,
+      text,
+    ))
   })
 }
 
-fn parse_taplo(text: &str) -> Result<SyntaxNode, ParseError> {
-  let parse_result = taplo::parser::parse(text);
-
-  if let Some(err) = parse_result.errors.first() {
-    Err(ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
-      Some((err.range.start().into(), err.range.end().into())),
-      &err.message,
-      text,
-    )))
+/// The range to underline beneath the offending line.
+///
+/// The diagnostic only underlines within a single line, and draws nothing at all for an empty range
+/// or one that runs past the end of its line — which is exactly what an error at the end of the
+/// input or inside an unterminated string produces. Keeping the range on its own line, and at least
+/// one character wide, means every error gets a caret.
+fn highlight_range(err: &parser::SyntaxError, text: &str) -> (usize, usize) {
+  let line_end = text[err.span.start..].find('\n').map(|i| err.span.start + i).unwrap_or(text.len());
+  let end = err.span.end.min(line_end);
+  if end > err.span.start {
+    (err.span.start, end)
   } else {
-    Ok(parse_result.into_syntax())
+    // an empty range still needs something to point at: the character it sits before, or the one
+    // it sits after when there is nothing left in the input
+    let start = err.span.start.min(text.len());
+    match text[start..].chars().next() {
+      Some(c) => (start, start + c.len_utf8()),
+      None => (text[..start].chars().next_back().map(|c| start - c.len_utf8()).unwrap_or(start), start),
+    }
   }
 }
 

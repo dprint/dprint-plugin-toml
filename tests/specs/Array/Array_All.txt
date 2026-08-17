@@ -49,3 +49,39 @@ values = [
 
   4,
 ]
+
+== should not invent a blank line when a comma trails onto a later line ==
+a = [
+  1 # a
+  , # b
+  2
+]
+
+[expect]
+a = [
+  1, # a
+  # b
+  2,
+]
+
+== should break up an array around a multi-line value wherever it sits ==
+a = [{ b = """
+x
+""" }, 1]
+c = [1, { d = """
+x
+""" }]
+
+[expect]
+a = [
+  { b = """
+x
+""" },
+  1,
+]
+c = [
+  1,
+  { d = """
+x
+""" },
+]

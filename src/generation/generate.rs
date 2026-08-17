@@ -1,26 +1,15 @@
-#![allow(clippy::needless_lifetimes)]
-
 use dprint_core::formatting::conditions::*;
 use dprint_core::formatting::ir_helpers::SingleLineOptions;
 use dprint_core::formatting::*;
 use dprint_core_macros::sc;
-use std::cell::Cell;
 use std::rc::Rc;
-use taplo::rowan::NodeOrToken;
-use taplo::syntax::SyntaxElement;
-use taplo::syntax::SyntaxKind;
-use taplo::syntax::SyntaxNode;
-use taplo::syntax::SyntaxToken;
 
 use super::Context;
-use crate::configuration::Configuration;
-use crate::rowan_extensions::*;
+use crate::ast::*;
 
-type PrintItemsResult = Result<PrintItems, ()>;
-
-pub fn generate(node: SyntaxNode, text: &str, config: &Configuration) -> PrintItems {
-  let mut context = Context::new(text, config);
-  let mut items = gen_node(node.into(), &mut context);
+pub fn generate(root: &Root, config: &crate::configuration::Configuration) -> PrintItems {
+  let mut context = Context::new(config);
+  let mut items = gen_root(root, &mut context);
   items.push_condition(if_true(
     "endOfFileNewLine",
     Rc::new(|context| Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0)),
@@ -29,437 +18,408 @@ pub fn generate(node: SyntaxNode, text: &str, config: &Configuration) -> PrintIt
   items
 }
 
-fn gen_node<'a>(node: SyntaxElement, context: &mut Context<'a>) -> PrintItems {
-  gen_node_with_inner(node, context, |items, _| items)
-}
-
-fn gen_node_with_inner<'a>(node: SyntaxElement, context: &mut Context<'a>, inner_parse: impl FnOnce(PrintItems, &mut Context<'a>) -> PrintItems) -> PrintItems {
+fn gen_root(root: &Root, context: &mut Context) -> PrintItems {
   let mut items = PrintItems::new();
-  // eprintln!("{:?}", node);
-
-  if node.kind() != SyntaxKind::COMMENT {
-    for comment in node.get_comments_on_previous_lines() {
-      if !context.has_handled_comment(comment.text_range().start().into()) {
-        items.extend(gen_comment(comment.clone(), context));
+  let mut previous: Option<&RootItem> = None;
+  for item in &root.items {
+    if let Some(previous) = previous {
+      items.push_signal(Signal::NewLine);
+      if item.blank_line_before() && allow_blank_line(previous, item) {
         items.push_signal(Signal::NewLine);
-        if NodeOrToken::Token(comment).has_trailing_blank_line() {
-          items.push_signal(Signal::NewLine);
-        }
       }
     }
+    items.extend(gen_root_item(item, context));
+    previous = Some(item);
   }
-
-  let result = match node.clone() {
-    NodeOrToken::Node(node) => match node.kind() {
-      SyntaxKind::ROOT => gen_root(node, context),
-      SyntaxKind::ARRAY => gen_array(node, context),
-      SyntaxKind::INLINE_TABLE => gen_inline_table(node, context),
-      SyntaxKind::ENTRY => gen_entry(node, context),
-      SyntaxKind::KEY => gen_key(node, context),
-      SyntaxKind::VALUE => gen_value(node, context),
-      SyntaxKind::TABLE_HEADER => gen_table_header(node, context),
-      SyntaxKind::TABLE_ARRAY_HEADER => gen_table_array_header(node, context),
-      _ => Err(()),
-    },
-    NodeOrToken::Token(token) => match token.kind() {
-      SyntaxKind::COMMENT => Ok(gen_comment(token, context)),
-      SyntaxKind::MULTI_LINE_STRING | SyntaxKind::MULTI_LINE_STRING_LITERAL => {
-        let mut items = PrintItems::new();
-        items.push_force_current_line_indentation();
-        items.extend(ir_helpers::gen_from_raw_string(token.text().trim()));
-        Ok(items)
-      }
-      _ => Ok(ir_helpers::gen_from_string(token.text().trim())),
-    },
-  };
-
-  items.extend(inner_parse(
-    match result {
-      Ok(items) => items,
-      Err(()) => ir_helpers::gen_from_raw_string_trim_line_ends(node.text().trim()),
-    },
-    context,
-  ));
-
-  if matches!(node.kind(), SyntaxKind::VALUE | SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER) {
-    for comment in node.child_comments() {
-      items.extend(gen_comment(comment, context));
-    }
-  }
-  if node.parent().is_none() || node.parent().unwrap().kind() != SyntaxKind::VALUE || !node.is_last_non_trivia_sibling() {
-    if let Some(trailing_comment) = get_trailing_comment(node) {
-      items.extend(gen_comment(trailing_comment, context));
-    }
-  }
-
   items
 }
 
-fn gen_root<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  // print_formatted_tree(node.clone());
+/// A blank line is kept everywhere except directly beneath a table header, where it only separates
+/// one header from another.
+fn allow_blank_line(previous: &RootItem, current: &RootItem) -> bool {
+  current.is_table_header() || !previous.is_table_header()
+}
 
-  let newline_count = Rc::new(Cell::new(0));
-  let mut gen_element = {
-    let mut found_first = false;
-    let mut last_node_kind = None;
-    let new_line_count = newline_count.clone();
-    move |element: SyntaxElement| {
+fn gen_root_item(item: &RootItem, context: &mut Context) -> PrintItems {
+  match item {
+    RootItem::Comment(comment) => gen_comment(comment, context),
+    RootItem::Entry(entry) => gen_entry(entry, context),
+    RootItem::TableHeader(header) => gen_table_header(header, context),
+  }
+}
+
+fn gen_table_header(header: &TableHeader, context: &mut Context) -> PrintItems {
+  // Spec: Naming rules for tables are the same as for keys
+  let mut items = PrintItems::new();
+  items.push_sc(if header.is_array_of_tables { sc!("[[") } else { sc!("[") });
+  items.extend(gen_key(&header.key));
+  items.push_sc(if header.is_array_of_tables { sc!("]]") } else { sc!("]") });
+  if let Some(comment) = &header.trailing_comment {
+    items.extend(gen_comment(comment, context));
+  }
+  items
+}
+
+fn gen_entry(entry: &Entry, context: &mut Context) -> PrintItems {
+  let mut items = gen_entry_without_trailing_comment(entry, context);
+  if let Some(comment) = &entry.trailing_comment {
+    items.extend(gen_comment(comment, context));
+  }
+  items
+}
+
+fn gen_entry_without_trailing_comment(entry: &Entry, context: &mut Context) -> PrintItems {
+  let mut items = gen_key(&entry.key);
+  items.push_sc(sc!(" = "));
+  items.extend(gen_value(&entry.value, context));
+  items
+}
+
+/// Spec: A key may be either bare, quoted, or dotted.
+fn gen_key(key: &Key) -> PrintItems {
+  let mut items = PrintItems::new();
+  for (i, part) in key.parts().enumerate() {
+    if i > 0 {
+      items.push_sc(sc!("."));
+    }
+    items.extend(ir_helpers::gen_from_string(part.text));
+  }
+  items
+}
+
+/// Spec: Values must be either String, Integer, Float, Boolean, DateTimes, Array, InlineTable
+fn gen_value(value: &Value, context: &mut Context) -> PrintItems {
+  match &value.kind {
+    ValueKind::Scalar(text) => ir_helpers::gen_from_string(text),
+    ValueKind::MultiLineString(text) => {
       let mut items = PrintItems::new();
-      if found_first {
-        items.push_signal(Signal::NewLine);
-        if new_line_count.get() > 1 && allow_blank_line(last_node_kind, element.kind()) {
-          items.push_signal(Signal::NewLine);
-        }
-      }
-
-      last_node_kind = Some(element.kind());
-      items.extend(gen_node(element, context));
-
-      found_first = true;
-      new_line_count.set(0);
+      items.push_force_current_line_indentation();
+      items.extend(ir_helpers::gen_from_raw_string(text));
       items
     }
-  };
+    ValueKind::Array(array) => gen_array(array, context),
+    ValueKind::InlineTable(table) => gen_inline_table(table, context),
+  }
+}
 
-  let mut items = PrintItems::new();
-  for element in node.children_with_tokens() {
-    match element {
-      NodeOrToken::Node(_) => items.extend(gen_element(element)),
-      NodeOrToken::Token(token) => match token.kind() {
-        SyntaxKind::NEWLINE => newline_count.set(newline_count.get() + token.newline_count()),
-        SyntaxKind::COMMENT => items.extend(gen_element(token.into())),
-        _ => {}
+// ---- arrays ----
+
+fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
+  if context.is_in_single_line_table() {
+    // An array within a table that has to stay on one line is collapsed onto that line, so its
+    // values are separated by hard spaces rather than by anything that could break. Its comments
+    // are still written: a comment ends its own line whatever we do, and those newlines sit within
+    // a value, which TOML 1.0 allows between the braces.
+    return gen_surrounded(
+      SurroundedParams {
+        open: sc!("["),
+        close: sc!("]"),
+        comment_after_open: array.comment_after_open.as_ref(),
+        comments_before_close: &array.comments_before_close,
       },
-    }
-  }
-
-  Ok(items)
-}
-
-fn allow_blank_line(previous_kind: Option<SyntaxKind>, current_kind: SyntaxKind) -> bool {
-  if matches!(current_kind, SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER) {
-    true
-  } else {
-    !matches!(previous_kind, Some(SyntaxKind::TABLE_HEADER | SyntaxKind::TABLE_ARRAY_HEADER))
-  }
-}
-
-fn gen_array<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  let values = node.children();
-  let open_token = get_token_with_kind(&node, SyntaxKind::BRACKET_START)?;
-  let close_token = get_token_with_kind(&node, SyntaxKind::BRACKET_END)?;
-  let inline_table_ancestor = node.ancestors().find(|a| a.kind() == SyntaxKind::INLINE_TABLE);
-  let is_in_inline_table = inline_table_ancestor.is_some();
-  let force_use_new_lines = !is_in_inline_table && has_following_newline(open_token.clone()) && node.children_with_tokens().nth(3).is_some();
-  ensure_all_kind(values.clone(), SyntaxKind::VALUE)?;
-
-  if inline_table_ancestor.as_ref().is_some_and(requires_verbatim_newlines) {
-    // The enclosing inline table had to give up its force-no-new-lines scope to keep a multi-line
-    // string intact, so nothing is holding this array to one line any more. Separate the values with
-    // hard spaces instead: an inline table has to stay on one line, and unlike the scope this leaves
-    // the string's own newlines alone.
-    let mut items = PrintItems::new();
-    items.push_sc(sc!("["));
-    for (i, value) in values.enumerate() {
-      if i > 0 {
-        items.push_sc(sc!(", "));
-      }
-      items.extend(gen_node(value.into(), context));
-    }
-    items.push_sc(sc!("]"));
-    return Ok(items);
-  }
-
-  Ok(gen_surrounded_by_tokens(
-    |context| {
-      let nodes = values.into_iter().map(|v| v.into()).collect::<Vec<_>>();
-      if nodes.is_empty() {
-        if force_use_new_lines {
-          return Signal::NewLine.into();
+      |context| {
+        let mut items = PrintItems::new();
+        for (i, value) in array.values.iter().enumerate() {
+          // space away from the previous value, unless its comment already ended that line
+          if i > 0 && array.values[i - 1].trailing_comment.is_none() {
+            items.push_sc(sc!(" "));
+          }
+          for comment in &value.leading_comments {
+            items.extend(gen_comment(comment, context));
+            items.push_signal(Signal::NewLine);
+          }
+          items.extend(gen_value(&value.value, context));
+          // the comma goes before the comment rather than after it, so that a comment ending its
+          // line doesn't leave the next value's comma leading the line beneath
+          if i + 1 < array.values.len() {
+            items.push_sc(sc!(","));
+          }
+          if let Some(comment) = &value.trailing_comment {
+            items.extend(gen_comment(comment, context));
+          }
         }
-        return PrintItems::new();
-      }
-      gen_comma_separated_values(
-        ParseCommaSeparatedValuesOptions {
-          nodes,
-          prefer_hanging: false,
-          force_use_new_lines,
-          allow_blank_lines: true,
-          single_line_space_at_start: false,
-          single_line_space_at_end: false,
-          custom_single_line_separator: None,
-          multi_line_options: ir_helpers::MultiLineOptions::surround_newlines_indented(),
-          force_possible_newline_at_start: false,
-        },
-        context,
-      )
+        items
+      },
+      context,
+    );
+  }
+
+  let force_use_new_lines = array.force_use_new_lines();
+  gen_surrounded(
+    SurroundedParams {
+      open: sc!("["),
+      close: sc!("]"),
+      comment_after_open: array.comment_after_open.as_ref(),
+      comments_before_close: &array.comments_before_close,
     },
-    ParseSurroundedByTokensParams { open_token, close_token },
+    |context| {
+      if array.values.is_empty() {
+        return if force_use_new_lines { Signal::NewLine.into() } else { PrintItems::new() };
+      }
+      gen_separated(&array.values, force_use_new_lines, context)
+    },
     context,
-  ))
+  )
 }
 
-fn gen_inline_table<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  let values = node.children();
-  ensure_all_kind(values.clone(), SyntaxKind::ENTRY)?;
+// ---- inline tables ----
+
+fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
+  // TOML 1.1 allows an inline table to be written over several lines. The author chose that, so
+  // keep it; a table written on one line is never expanded, which would produce syntax a 1.0 parser
+  // rejects. A table holding a comment of its own is multi-line whatever follows its brace, since a
+  // comment runs to the end of its line, and generating it on one line would drop the comment. A
+  // comment inside one of its values is not the table's, and expanding the table over it would turn
+  // a 1.0 document into a 1.1 one.
+  //
+  // Nothing within a table that has to stay on one line may break, so a table nested in one is
+  // generated on a single line however the author wrote it.
+  if !context.is_in_single_line_table() && (table.multi_line_in_source || table.has_own_comment()) {
+    return gen_multi_line_inline_table(table, context);
+  }
 
   let mut items = PrintItems::new();
-  items.push_sc(sc!("{"));
-  let mut had_item = false;
-  for (i, value) in values.enumerate() {
-    items.push_sc(if i > 0 { sc!(", ") } else { sc!(" ") });
-    items.extend(gen_node(value.into(), context));
-    had_item = true;
-  }
-  items.push_sc(if had_item { sc!(" }") } else { sc!("}") });
-
-  // the comment seems to be stored as the last child of an inline table, so check for it here
-  if let Some(NodeOrToken::Token(token)) = node.children_with_tokens().last() {
-    if token.kind() == SyntaxKind::COMMENT {
-      items.extend(gen_comment(token, context));
+  context.with_single_line_table(|context| {
+    items.push_sc(sc!("{"));
+    for (i, entry) in table.entries.iter().enumerate() {
+      items.push_sc(if i > 0 { sc!(", ") } else { sc!(" ") });
+      items.extend(gen_entry_without_trailing_comment(entry, context));
     }
-  }
+    items.push_sc(if table.entries.is_empty() { sc!("}") } else { sc!(" }") });
+  });
 
-  // Disable newlines in a table. The spec says the following:
+  // Spec:
   // > Inline tables are intended to appear on a single line. A terminating comma (also called trailing comma)
   // > is not permitted after the last key/value pair in an inline table. No newlines are allowed between the
   // > curly braces unless they are valid within a value. Even so, it is strongly discouraged to break an inline
   // > table onto multiples lines. If you find yourself gripped with this desire, it means you should be using
   // > standard tables.
   //
-  // Note the "unless they are valid within a value" carve out, which is what `requires_verbatim_newlines`
-  // detects. Everything within an inline table is separated by hard spaces, so the scope is not what
-  // holds it to one line and dropping it here doesn't let anything wrap.
-  Ok(if requires_verbatim_newlines(&node) {
+  // Note the "unless they are valid within a value" carve out. The newlines of a multi-line string
+  // are part of its value, and the printer discards every newline signal within a force-no-new-lines
+  // scope, so a table holding one has to be generated without the scope. Everything within is
+  // separated by hard spaces, so dropping it doesn't let anything wrap.
+  if table.entries.iter().any(|entry| entry.value.contains_multi_line_string()) {
     items
   } else {
     ir_helpers::with_no_new_lines(items)
-  })
-}
-
-/// Whether the newlines within `node` have to be emitted verbatim, which a force-no-new-lines scope
-/// cannot do: the printer discards every newline signal inside such a scope, and the newlines of a
-/// multi-line string are part of that string's value rather than formatting.
-///
-/// A node containing a comment stays on the scope-based path. A comment already forces a newline of
-/// its own, so the scope isn't what keeps such a node on one line, and the paths that skip the scope
-/// don't generate comments.
-fn requires_verbatim_newlines(node: &SyntaxNode) -> bool {
-  let mut found_multi_line_string = false;
-  for element in node.descendants_with_tokens() {
-    match element.kind() {
-      SyntaxKind::MULTI_LINE_STRING | SyntaxKind::MULTI_LINE_STRING_LITERAL => found_multi_line_string = true,
-      SyntaxKind::COMMENT => return false,
-      _ => {}
-    }
   }
-  found_multi_line_string
 }
 
-fn gen_entry<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  let key = get_child_with_kind(&node, SyntaxKind::KEY)?;
-  let value = get_child_with_kind(&node, SyntaxKind::VALUE)?;
+fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
+  gen_surrounded(
+    SurroundedParams {
+      open: sc!("{"),
+      close: sc!("}"),
+      comment_after_open: table.comment_after_open.as_ref(),
+      comments_before_close: &table.comments_before_close,
+    },
+    |context| {
+      if table.entries.is_empty() {
+        return Signal::NewLine.into();
+      }
+      gen_separated(&table.entries, true, context)
+    },
+    context,
+  )
+}
+
+// ---- shared bracket handling ----
+
+struct SurroundedParams<'a> {
+  open: &'static StringContainer,
+  close: &'static StringContainer,
+  comment_after_open: Option<&'a Comment<'a>>,
+  comments_before_close: &'a [Comment<'a>],
+}
+
+fn gen_surrounded(params: SurroundedParams, gen_inner: impl FnOnce(&mut Context) -> PrintItems, context: &mut Context) -> PrintItems {
   let mut items = PrintItems::new();
-
-  items.extend(gen_node(key.into(), context));
-  items.push_sc(sc!(" = "));
-  items.extend(gen_node(value.into(), context));
-
-  Ok(items)
-}
-
-fn gen_key<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  // Spec: A key may be either bare, quoted, or dotted.
-  Ok(gen_children_inline(node, context))
-}
-
-fn gen_value<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  // Spec: Values must be either String, Integer, Float, Boolean, DateTimes, Array, InlineTable
-  Ok(gen_children_inline(node, context))
-}
-
-fn gen_children_inline<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItems {
-  let mut items = PrintItems::new();
-  for element in get_children_with_non_trivia_tokens(node) {
-    items.extend(gen_node(element, context));
+  items.push_sc(params.open);
+  if let Some(comment) = params.comment_after_open {
+    items.extend(gen_comment(comment, context));
   }
-  items
-}
-
-fn gen_table_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  // Spec: Naming rules for tables are the same as for keys
-  let key = get_child_with_kind(&node, SyntaxKind::KEY)?;
-  let mut items = PrintItems::new();
-  items.push_sc(sc!("["));
-  items.extend(gen_node(key.into(), context));
-  items.push_sc(sc!("]"));
-  Ok(items)
-}
-
-fn gen_table_array_header<'a>(node: SyntaxNode, context: &mut Context<'a>) -> PrintItemsResult {
-  // Spec: Naming rules for tables are the same as for keys
-  let key = get_child_with_kind(&node, SyntaxKind::KEY)?;
-  let mut items = PrintItems::new();
-  items.push_sc(sc!("[["));
-  items.extend(gen_node(key.into(), context));
-  items.push_sc(sc!("]]"));
-  Ok(items)
-}
-
-struct ParseSurroundedByTokensParams {
-  open_token: SyntaxToken,
-  close_token: SyntaxToken,
-}
-
-fn gen_surrounded_by_tokens<'a, 'b>(
-  gen_inner: impl FnOnce(&mut Context<'a>) -> PrintItems,
-  opts: ParseSurroundedByTokensParams,
-  context: &mut Context<'a>,
-) -> PrintItems {
-  let mut items = PrintItems::new();
-  items.extend(gen_node(opts.open_token.clone().into(), context));
 
   items.extend(gen_inner(context));
 
-  let close_token: SyntaxElement = opts.close_token.into();
-  for comment in close_token.get_comments_on_previous_lines() {
-    if NodeOrToken::Token(comment.clone()).has_leading_blank_line() {
+  for comment in params.comments_before_close {
+    if comment.blank_line_before {
       items.push_signal(Signal::NewLine);
     }
     items.extend(ir_helpers::with_indent(gen_comment(comment, context)));
     items.push_signal(Signal::NewLine);
   }
 
-  items.extend(gen_node(close_token, context));
+  items.push_sc(params.close);
   items
 }
 
-struct ParseCommaSeparatedValuesOptions {
-  nodes: Vec<SyntaxElement>,
-  prefer_hanging: bool,
-  force_use_new_lines: bool,
-  allow_blank_lines: bool,
-  single_line_space_at_start: bool,
-  single_line_space_at_end: bool,
-  custom_single_line_separator: Option<PrintItems>,
-  multi_line_options: ir_helpers::MultiLineOptions,
-  force_possible_newline_at_start: bool,
+/// One comma separated item of an array or a multi-line inline table.
+struct SeparatedItem<'a> {
+  leading_comments: &'a [Comment<'a>],
+  /// Whether a blank line sits between the last leading comment and the item itself.
+  blank_line_before: bool,
+  trailing_comment: Option<&'a Comment<'a>>,
+  /// Whether a blank line separates this whole item, comments included, from the one before it.
+  blank_line_before_item: bool,
+  entry: SeparatedItemValue<'a>,
 }
 
-fn gen_comma_separated_values<'a>(opts: ParseCommaSeparatedValuesOptions, context: &mut Context<'a>) -> PrintItems {
-  let nodes = opts.nodes;
+enum SeparatedItemValue<'a> {
+  Value(&'a Value<'a>),
+  Entry(&'a Entry<'a>),
+}
+
+impl<'a> From<&'a ArrayValue<'a>> for SeparatedItem<'a> {
+  fn from(value: &'a ArrayValue<'a>) -> Self {
+    SeparatedItem {
+      leading_comments: &value.leading_comments,
+      blank_line_before: value.blank_line_before,
+      trailing_comment: value.trailing_comment.as_ref(),
+      blank_line_before_item: blank_line_before_item(&value.leading_comments, value.blank_line_before),
+      entry: SeparatedItemValue::Value(&value.value),
+    }
+  }
+}
+
+impl<'a> From<&'a Entry<'a>> for SeparatedItem<'a> {
+  fn from(entry: &'a Entry<'a>) -> Self {
+    SeparatedItem {
+      leading_comments: &entry.leading_comments,
+      blank_line_before: entry.blank_line_before,
+      trailing_comment: entry.trailing_comment.as_ref(),
+      blank_line_before_item: blank_line_before_item(&entry.leading_comments, entry.blank_line_before),
+      entry: SeparatedItemValue::Entry(entry),
+    }
+  }
+}
+
+/// A blank line above an item sits above its comments when it has any.
+fn blank_line_before_item(leading_comments: &[Comment<'_>], blank_line_before: bool) -> bool {
+  match leading_comments.first() {
+    Some(comment) => comment.blank_line_before,
+    None => blank_line_before,
+  }
+}
+
+/// `items` is the array's values or the table's entries; each is turned into a [`SeparatedItem`]
+/// as it is reached rather than up front, so the whole run is never collected into a `Vec`.
+fn gen_separated<'a, T>(items: &'a [T], force_use_new_lines: bool, context: &mut Context) -> PrintItems
+where
+  &'a T: Into<SeparatedItem<'a>>,
+{
   let indent_width = context.config.indent_width;
-  let compute_lines_span = opts.allow_blank_lines; // save time otherwise
   ir_helpers::gen_separated_values(
     |is_multi_line_ref| {
-      let mut generated_nodes = Vec::new();
-      let nodes_count = nodes.len();
-      for (i, value) in nodes.into_iter().enumerate() {
-        let (allow_inline_multi_line, allow_inline_single_line) = (value.kind() == SyntaxKind::INLINE_TABLE, false);
-        let lines_span = if compute_lines_span {
-          Some(ir_helpers::LinesSpan {
-            start_line: context.get_line_number_at_pos(value.start_including_leading_comments()),
-            end_line: context.get_line_number_at_pos(value.text_range().end().into()),
-          })
-        } else {
-          None
-        };
-        let items = ir_helpers::new_line_group({
-          let generated_comma = if i == nodes_count - 1 {
-            // todo: make this conditional based on config
-            let is_multi_line = is_multi_line_ref.create_resolver();
-            if_true("commaIfMultiLine", is_multi_line, ",".into()).into()
-          } else {
-            ",".into()
-          };
-          gen_comma_separated_value(value, generated_comma, context)
+      let count = items.len();
+      let mut generated = Vec::with_capacity(count);
+      // Synthetic line numbers rather than source positions: a blank line is preserved because the
+      // author asked for one, and the item may since have been moved by the Cargo.toml sorting,
+      // which would leave any position taken from the source pointing at the wrong line.
+      let mut line = 0;
+      for (i, item) in items.iter().map(Into::into).enumerate() {
+        if i > 0 {
+          line += if item.blank_line_before_item { 2 } else { 1 };
+        }
+        let lines_span = Some(ir_helpers::LinesSpan {
+          start_line: line,
+          end_line: line,
         });
-        generated_nodes.push(ir_helpers::GeneratedValue {
-          items,
+        let generated_comma = if i == count - 1 {
+          // todo: make this conditional based on config
+          let is_multi_line = is_multi_line_ref.create_resolver();
+          if_true("commaIfMultiLine", is_multi_line, ",".into()).into()
+        } else {
+          ",".into()
+        };
+        generated.push(ir_helpers::GeneratedValue {
+          items: ir_helpers::new_line_group(gen_separated_item(item, generated_comma, context)),
           lines_span,
-          allow_inline_multi_line,
-          allow_inline_single_line,
+          // a value spanning several lines always breaks its group up, wherever it sits in it
+          allow_inline_multi_line: false,
+          allow_inline_single_line: false,
         });
       }
-
-      generated_nodes
+      generated
     },
     ir_helpers::GenSeparatedValuesOptions {
-      prefer_hanging: opts.prefer_hanging,
-      force_use_new_lines: opts.force_use_new_lines,
-      allow_blank_lines: opts.allow_blank_lines,
+      prefer_hanging: false,
+      force_use_new_lines,
+      allow_blank_lines: true,
       single_line_options: SingleLineOptions {
-        space_at_start: opts.single_line_space_at_start,
-        space_at_end: opts.single_line_space_at_end,
-        separator: opts.custom_single_line_separator.unwrap_or(Signal::SpaceOrNewLine.into()),
+        space_at_start: false,
+        space_at_end: false,
+        separator: Signal::SpaceOrNewLine.into(),
       },
       indent_width,
-      multi_line_options: opts.multi_line_options,
-      force_possible_newline_at_start: opts.force_possible_newline_at_start,
+      multi_line_options: ir_helpers::MultiLineOptions::surround_newlines_indented(),
+      force_possible_newline_at_start: false,
     },
   )
   .items
 }
 
-fn gen_comma_separated_value<'a>(value: SyntaxElement, generated_comma: PrintItems, context: &mut Context<'a>) -> PrintItems {
+fn gen_separated_item(item: SeparatedItem, generated_comma: PrintItems, context: &mut Context) -> PrintItems {
   let mut items = PrintItems::new();
-  let comma_token = get_next_comma_sibling(value.clone());
-
-  let generated_comma = generated_comma.into_rc_path();
-  items.extend(gen_node_with_inner(value, context, move |mut items, _| {
-    // this Rc clone is necessary because we can't move the captured generated_comma out of this closure
-    items.push_optional_path(generated_comma);
-    items
-  }));
-
-  // get the trailing comments after the comma token
-  if let Some(comma_token) = comma_token {
-    items.extend(gen_trailing_comment(comma_token.into(), context));
+  for (i, comment) in item.leading_comments.iter().enumerate() {
+    // a blank above the first comment separates this item from the previous one, which the
+    // separator between items has already accounted for
+    if i > 0 && comment.blank_line_before {
+      items.push_signal(Signal::NewLine);
+    }
+    items.extend(gen_comment(comment, context));
+    items.push_signal(Signal::NewLine);
+  }
+  if item.blank_line_before && !item.leading_comments.is_empty() {
+    items.push_signal(Signal::NewLine);
   }
 
+  items.extend(match item.entry {
+    SeparatedItemValue::Value(value) => gen_value(value, context),
+    SeparatedItemValue::Entry(entry) => gen_entry_without_trailing_comment(entry, context),
+  });
+  items.extend(generated_comma);
+
+  if let Some(comment) = item.trailing_comment {
+    items.extend(gen_comment(comment, context));
+  }
   items
 }
 
-fn gen_trailing_comment<'a>(element: SyntaxElement, context: &mut Context<'a>) -> PrintItems {
-  match get_trailing_comment(element) {
-    Some(comment) => gen_comment(comment, context),
-    None => PrintItems::new(),
-  }
-}
+// ---- comments ----
 
-fn gen_comment<'a>(comment: SyntaxToken, context: &mut Context<'a>) -> PrintItems {
-  let pos = comment.text_range().start().into();
-  if context.has_handled_comment(pos) {
-    return PrintItems::new();
-  }
-  context.add_handled_comment(pos);
-
-  #[cfg(debug_assertions)]
-  debug_assert_kind(comment.clone().into(), SyntaxKind::COMMENT);
-
+fn gen_comment(comment: &Comment, context: &mut Context) -> PrintItems {
   let mut items = PrintItems::new();
   items.push_condition(if_false("spaceIfNotStartOfLine", condition_resolvers::is_start_of_line(), " ".into()));
-  items.extend({
-    if context.config.comment_force_leading_space {
-      let info = get_comment_text_info(comment.text());
-      let after_hash_text = &comment.text()[info.start_text_index..].trim_end();
-      let mut text = "#".repeat(info.leading_hashes_count);
-      if info.has_exclamation_point {
-        text.push('!');
-      }
-      if !after_hash_text.is_empty() {
-        if !info.has_leading_whitespace {
-          text.push(' ');
-        }
-        text.push_str(after_hash_text);
-      }
-      ir_helpers::gen_from_raw_string(&text)
-    } else {
-      ir_helpers::gen_from_raw_string(comment.text())
-    }
-  });
+  items.extend(gen_comment_text(comment, context));
   items.push_signal(Signal::ExpectNewLine);
   items
+}
+
+fn gen_comment_text(comment: &Comment, context: &mut Context) -> PrintItems {
+  if !context.config.comment_force_leading_space {
+    return ir_helpers::gen_from_raw_string(comment.text);
+  }
+
+  let info = get_comment_text_info(comment.text);
+  let after_hash_text = comment.text[info.start_text_index..].trim_end_matches([' ', '\t']);
+  // Nothing is inserted when the text after the hashes already begins with whitespace, or when
+  // there is no text at all, so rebuilding would only reproduce the source text. Almost every
+  // comment in a real file takes this path, and rendering the slice saves building the copy.
+  if info.has_leading_whitespace || after_hash_text.is_empty() {
+    return ir_helpers::gen_from_raw_string(&comment.text[..info.start_text_index + after_hash_text.len()]);
+  }
+
+  let mut text = String::with_capacity(comment.text.len() + 1);
+  for _ in 0..info.leading_hashes_count {
+    text.push('#');
+  }
+  if info.has_exclamation_point {
+    text.push('!');
+  }
+  text.push(' ');
+  text.push_str(after_hash_text);
+  ir_helpers::gen_from_raw_string(&text)
 }
 
 struct CommentTextInfo {
@@ -501,120 +461,5 @@ fn get_comment_text_info(text: &str) -> CommentTextInfo {
     has_exclamation_point,
     has_leading_whitespace,
     start_text_index,
-  }
-}
-
-#[allow(dead_code)]
-#[cfg(debug_assertions)]
-fn print_formatted_tree(node: SyntaxNode) {
-  print_node_and_children(node, 0);
-
-  fn print_node_and_children(node: SyntaxNode, indent: usize) {
-    println!("{}{:?}", " ".repeat(indent), node);
-    for c in node.children_with_tokens() {
-      match c {
-        NodeOrToken::Node(c) => {
-          print_node_and_children(c.clone(), indent + 2);
-        }
-        NodeOrToken::Token(t) => {
-          println!("{}{:?} [TOKEN]", " ".repeat(indent + 2), t);
-        }
-      }
-    }
-  }
-}
-
-fn ensure_all_kind(nodes: impl Iterator<Item = SyntaxNode>, kind: SyntaxKind) -> Result<(), ()> {
-  for node in nodes {
-    ensure_kind(node.into(), kind)?;
-  }
-  Ok(())
-}
-
-fn ensure_kind(element: SyntaxElement, kind: SyntaxKind) -> Result<(), ()> {
-  if element.kind() == kind {
-    Ok(())
-  } else {
-    Err(())
-  }
-}
-
-#[cfg(debug_assertions)]
-fn debug_assert_kind(element: SyntaxElement, kind: SyntaxKind) {
-  if element.kind() != kind {
-    panic!("Debug Assertion: Expected kind {:?}, but was {:?}", kind, element.kind());
-  }
-}
-
-fn has_following_newline(token: SyntaxToken) -> bool {
-  let mut element: SyntaxElement = token.into();
-  while let Some(sibling) = element.next_sibling_or_token() {
-    element = sibling.clone();
-    match sibling {
-      NodeOrToken::Token(token) => match token.kind() {
-        SyntaxKind::WHITESPACE => continue,
-        SyntaxKind::NEWLINE | SyntaxKind::COMMENT => return true,
-        _ => break,
-      },
-      NodeOrToken::Node(_) => break,
-    }
-  }
-  false
-}
-
-fn get_next_comma_sibling(mut element: SyntaxElement) -> Option<SyntaxToken> {
-  while let Some(sibling) = element.next_sibling_or_token() {
-    element = sibling.clone();
-    match sibling {
-      NodeOrToken::Token(token) => match token.kind() {
-        SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE | SyntaxKind::COMMENT => continue,
-        SyntaxKind::COMMA => return Some(token),
-        _ => break,
-      },
-      NodeOrToken::Node(_) => break,
-    }
-  }
-  None
-}
-
-fn get_trailing_comment(mut element: SyntaxElement) -> Option<SyntaxToken> {
-  while let Some(sibling) = element.next_sibling_or_token() {
-    element = sibling.clone();
-    match sibling {
-      NodeOrToken::Token(token) => match token.kind() {
-        SyntaxKind::WHITESPACE => continue,
-        SyntaxKind::COMMENT => return Some(token),
-        _ => break,
-      },
-      NodeOrToken::Node(_) => break,
-    }
-  }
-  None
-}
-
-fn get_children_with_non_trivia_tokens(node: SyntaxNode) -> impl Iterator<Item = SyntaxElement> {
-  node.children_with_tokens().filter_map(|c| match c {
-    NodeOrToken::Token(token) => {
-      if token.kind() != SyntaxKind::WHITESPACE && token.kind() != SyntaxKind::COMMENT {
-        Some(token.into())
-      } else {
-        None
-      }
-    }
-    NodeOrToken::Node(node) => Some(node.into()),
-  })
-}
-
-fn get_child_with_kind(node: &SyntaxNode, kind: SyntaxKind) -> Result<SyntaxNode, ()> {
-  match node.children().find(|c| c.kind() == kind) {
-    Some(node) => Ok(node),
-    None => Err(()),
-  }
-}
-
-fn get_token_with_kind(node: &SyntaxNode, kind: SyntaxKind) -> Result<SyntaxToken, ()> {
-  match node.children_with_tokens().find(|c| c.kind() == kind) {
-    Some(NodeOrToken::Token(token)) => Ok(token),
-    _ => Err(()),
   }
 }

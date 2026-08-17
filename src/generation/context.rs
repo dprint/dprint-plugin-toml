@@ -1,40 +1,28 @@
 use crate::configuration::Configuration;
-use std::collections::HashSet;
 
 pub struct Context<'a> {
   pub config: &'a Configuration,
-  pub text: &'a str,
-  handled_comments: HashSet<usize>,
+  /// How many single-line inline tables enclose whatever is being generated. Nothing within one
+  /// may break onto another line.
+  single_line_table_depth: usize,
 }
 
 impl<'a> Context<'a> {
-  pub fn new(text: &'a str, config: &'a Configuration) -> Self {
+  pub fn new(config: &'a Configuration) -> Self {
     Self {
       config,
-      text,
-      handled_comments: HashSet::new(),
+      single_line_table_depth: 0,
     }
   }
 
-  pub fn has_handled_comment(&self, pos: usize) -> bool {
-    self.handled_comments.contains(&pos)
+  pub fn is_in_single_line_table(&self) -> bool {
+    self.single_line_table_depth > 0
   }
 
-  pub fn add_handled_comment(&mut self, pos: usize) {
-    self.handled_comments.insert(pos);
-  }
-
-  pub fn get_line_number_at_pos(&self, pos: usize) -> usize {
-    // todo: make this faster by using an array of line indexes
-    let mut line_number = 0;
-    for (i, c) in self.text.char_indices() {
-      if pos <= i {
-        break;
-      }
-      if c == '\n' {
-        line_number += 1;
-      }
-    }
-    line_number
+  pub fn with_single_line_table<T>(&mut self, action: impl FnOnce(&mut Self) -> T) -> T {
+    self.single_line_table_depth += 1;
+    let result = action(self);
+    self.single_line_table_depth -= 1;
+    result
   }
 }

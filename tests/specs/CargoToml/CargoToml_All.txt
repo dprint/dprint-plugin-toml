@@ -126,3 +126,59 @@ b = "2"
 # 3
 c = "4"
 d = "3"
+
+== should not invent blank lines in an array when sorting moves an entry ==
+[package]
+zzz = "last"
+keywords = [
+  "macros",
+  "syn",
+]
+name = "x"
+
+[expect]
+[package]
+name = "x"
+keywords = [
+  "macros",
+  "syn",
+]
+zzz = "last"
+
+== should keep a blank line under a group's comments when sorting reorders the group ==
+[dependencies]
+# a
+# b
+
+z = 1
+y = 2
+
+[expect]
+[dependencies]
+# a
+# b
+
+y = 2
+z = 1
+
+== should apply conventions to a quoted table header ==
+["dependencies"]
+z = "1"
+a = "2"
+
+[expect]
+["dependencies"]
+a = "2"
+z = "1"
+
+== should be stable when two package entries share a sort key ==
+[package]
+name = "x"
+version.workspace = true
+version.foo = 1
+
+[expect]
+[package]
+name = "x"
+version.workspace = true
+version.foo = 1

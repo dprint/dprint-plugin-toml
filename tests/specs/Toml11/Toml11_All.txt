@@ -1,0 +1,126 @@
+== should keep an inline table the author wrote over multiple lines ==
+tbl = {
+    key      = "a string",
+    moar-tbl =  {
+        key = 1,
+    },
+}
+
+[expect]
+tbl = {
+  key = "a string",
+  moar-tbl = {
+    key = 1,
+  },
+}
+
+== should not expand an inline table the author wrote on one line ==
+single = { a = 1, b = 2 }
+long = { aaaaaaaaaaaa = 1, bbbbbbbbbbbb = 2, cccccccccccc = 3, dddddddddddd = 4, eeeeeeeeeeee = 5 }
+
+[expect]
+single = { a = 1, b = 2 }
+long = { aaaaaaaaaaaa = 1, bbbbbbbbbbbb = 2, cccccccccccc = 3, dddddddddddd = 4, eeeeeeeeeeee = 5 }
+
+== should drop a trailing comma from a single line inline table ==
+trailing = { a = 1, }
+
+[expect]
+trailing = { a = 1 }
+
+== should keep comments in a multi-line inline table ==
+tbl = { # note
+  a = 1, # trailing
+  # leading
+  b = 2,
+}
+
+[expect]
+tbl = { # note
+  a = 1, # trailing
+  # leading
+  b = 2,
+}
+
+== should keep the new escapes ==
+null = "byte: \x00; a: \x61"
+csi = "\e["
+
+[expect]
+null = "byte: \x00; a: \x61"
+csi = "\e["
+
+== should keep times without seconds ==
+dt = 2010-02-03 14:15
+t = 14:15
+full = 1979-05-27T07:32:00Z
+
+[expect]
+dt = 2010-02-03 14:15
+t = 14:15
+full = 1979-05-27T07:32:00Z
+
+== should keep comments in an inline table whose brace is followed by a value ==
+a = { b = 1, # c
+c = 2 }
+d = { e = 1,
+  # lead
+  f = 2 }
+g = { h = 1,
+  # close
+}
+
+[expect]
+a = {
+  b = 1, # c
+  c = 2,
+}
+d = {
+  e = 1,
+  # lead
+  f = 2,
+}
+g = {
+  h = 1,
+  # close
+}
+
+== should keep a table nested in a single line table on one line ==
+a = { b = {
+  c = 1
+} }
+d = { e = [{
+  f = 1
+}] }
+
+[expect]
+a = { b = { c = 1 } }
+d = { e = [{ f = 1 }] }
+
+== should keep a blank line under a comment on the opening brace ==
+a = { # one
+
+  # two
+}
+
+[expect]
+a = { # one
+
+  # two
+}
+
+== should not expand a one line table over a comment inside one of its values ==
+a = { b = [
+  1, # one
+  2,
+] }
+c = { d = "x", e = ["f", "g" # note
+  # more
+] }
+
+[expect]
+a = { b = [1, # one
+2] }
+c = { d = "x", e = ["f", "g" # note
+  # more
+] }
