@@ -1,0 +1,83 @@
+== should collapse several blank lines above a comment to one ==
+a = 1
+
+
+
+# note
+b = 2
+
+[expect]
+a = 1
+
+# note
+b = 2
+
+== should collapse several blank lines inside an array to one ==
+a = [
+  1,
+
+
+
+  # note
+  2,
+]
+
+[expect]
+a = [
+  1,
+
+  # note
+  2,
+]
+
+== should keep a blank line between a comment and the entry beneath it ==
+# note
+
+a = 1
+
+[expect]
+# note
+
+a = 1
+
+== should keep a blank line between comments ==
+# one
+
+# two
+
+# three
+a = 1
+
+[expect]
+# one
+
+# two
+
+# three
+a = 1
+
+== should drop a blank line between a header and its comment ==
+[a]
+
+
+# note
+key = 1
+
+[expect]
+[a]
+# note
+key = 1
+
+== should keep a blank line above a comment introducing a header ==
+a = 1
+
+# about b
+[b]
+key = 2
+
+[expect]
+a = 1
+
+# about b
+[b]
+key = 2

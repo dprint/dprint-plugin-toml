@@ -297,6 +297,26 @@ pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cm
 /// `# exts` then stays at the top of its run instead of being carried off to wherever its entry
 /// happens to sort. Comments written flush against their entry, with nothing separating them from
 /// what came before, are that entry's own and travel with it.
+/// How many of a group's first unit's leading comments head the group rather than describe the
+/// entry they sit above.
+///
+/// A blank line is what tells the two apart, wherever the author put it: above the comments,
+/// between them and the entry, or part way down the block, which splits a heading from the notes
+/// written against the entry itself. Only a group's first unit can carry any of those blanks,
+/// since a later one would have started a group of its own.
+fn heading_comment_count<T>(unit: &Unit<T>) -> usize {
+  if unit.inner_blank {
+    return unit.leading_comments.len();
+  }
+  // the blank above the first comment is `leading_blank` rather than a split within the block,
+  // so only the comments after it are looked at
+  match unit.leading_comments.iter().skip(1).rposition(|c| c.blank_line_before) {
+    Some(index) => index + 1,
+    None if unit.leading_blank => unit.leading_comments.len(),
+    None => 0,
+  }
+}
+
 fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
   let mut group_start = 0;
   while group_start < units.len() {
@@ -306,17 +326,25 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
     }
 
     let group = &mut units[group_start..group_end];
-    // A blank line above the group's comments, or between them and the entry beneath, marks them
-    // as a heading for the group rather than a note about that one entry, so they stay at its top.
-    // Any blank line beneath them is part of that heading and travels with it. Only the group's
-    // first unit can carry either blank, since a later one would have started a group of its own.
-    let is_heading = group[0].leading_blank || group[0].inner_blank;
     let leading_blank = group[0].leading_blank;
-    let (group_comments, inner_blank) = if is_heading {
-      (
-        std::mem::take(&mut group[0].leading_comments),
-        std::mem::replace(&mut group[0].inner_blank, false),
-      )
+    let heading_len = heading_comment_count(&group[0]);
+    let is_heading = heading_len > 0;
+    // The heading is lifted off the group's first entry and put back at the top once the group is
+    // sorted; whatever comments are left below the split describe that entry and travel with it.
+    let (group_comments, blank_under_heading) = if is_heading {
+      let head = &mut group[0];
+      let mut group_comments = head.leading_comments.drain(..heading_len).collect::<Vec<_>>();
+      let blank = match head.leading_comments.first_mut() {
+        // the blank that separated the heading from the comments describing the entry
+        Some(first) => std::mem::replace(&mut first.blank_line_before, false),
+        // the heading took every comment, so what follows it is the entry itself
+        None => std::mem::replace(&mut head.inner_blank, false),
+      };
+      // the blank above the heading belongs to the group and is re-applied below
+      if let Some(first) = group_comments.first_mut() {
+        first.blank_line_before = false;
+      }
+      (group_comments, blank)
     } else {
       (Vec::new(), false)
     };
@@ -329,9 +357,9 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
     let head = &mut group[0];
     if is_heading {
       match head.leading_comments.first_mut() {
-        // the blank now separates the group's heading from the comments of whichever entry sorted first
-        Some(first) => first.blank_line_before = inner_blank,
-        None => head.inner_blank = inner_blank,
+        // the blank now separates the heading from whatever sorted to the top of the group
+        Some(first) => first.blank_line_before = blank_under_heading,
+        None => head.inner_blank = blank_under_heading,
       }
       head.leading_comments.splice(0..0, group_comments);
     }

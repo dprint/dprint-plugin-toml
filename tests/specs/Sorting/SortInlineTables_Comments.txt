@@ -1,0 +1,86 @@
+~~ sortInlineTables: true ~~
+== should carry a trailing comment with its entry ==
+a = {
+  c = 1, # about c
+  b = 2, # about b
+}
+
+[expect]
+a = {
+  b = 2, # about b
+  c = 1, # about c
+}
+
+== should move a comment written flush against the first entry with that entry ==
+a = {
+  # about c
+  c = 1,
+  b = 2,
+}
+
+[expect]
+a = {
+  b = 2,
+  # about c
+  c = 1,
+}
+
+== should keep a heading set off by a blank line at the top ==
+a = {
+  # heading
+
+  c = 1,
+  b = 2,
+}
+
+[expect]
+a = {
+  # heading
+
+  b = 2,
+  c = 1,
+}
+
+== should leave the comments around the braces where they are ==
+a = { # after open
+  c = 1,
+  b = 2,
+  # before close
+}
+
+[expect]
+a = { # after open
+  b = 2,
+  c = 1,
+  # before close
+}
+
+== should sort a nested table that holds a comment ==
+a = {
+  b = { d = 1, c = 2 }, # about b
+  a = 3,
+}
+
+[expect]
+a = {
+  a = 3,
+  b = { c = 2, d = 1 }, # about b
+}
+
+== should not sort across a blank line ==
+a = {
+  d = 1,
+  c = 2,
+
+  b = 3,
+  a = 4,
+}
+
+[expect]
+a = {
+  c = 2,
+  d = 1,
+
+  a = 4,
+  b = 3,
+}

@@ -1,0 +1,149 @@
+== should keep every comment position in an array ==
+a = [ # after open
+  # above one
+  1, # trailing one
+  2,
+  # before close
+]
+
+[expect]
+a = [ # after open
+  # above one
+  1, # trailing one
+  2,
+  # before close
+]
+
+== should keep a comment as the only content of an array ==
+a = [
+  # nothing
+]
+
+[expect]
+a = [
+  # nothing
+]
+
+== should keep every comment position in a multi-line inline table ==
+a = { # after open
+  # above b
+  b = 1, # trailing b
+  c = 2,
+  # before close
+}
+
+[expect]
+a = { # after open
+  # above b
+  b = 1, # trailing b
+  c = 2,
+  # before close
+}
+
+== should keep a comment as the only content of an inline table ==
+a = {
+  # nothing
+}
+
+[expect]
+a = {
+  # nothing
+}
+
+== should keep a blank line above a comment in an array ==
+a = [
+  1,
+
+  # about two
+  2,
+]
+
+[expect]
+a = [
+  1,
+
+  # about two
+  2,
+]
+
+== should keep several comments before the closing bracket ==
+a = [
+  1,
+  # one
+  # two
+
+  # three
+]
+
+[expect]
+a = [
+  1,
+  # one
+  # two
+
+  # three
+]
+
+== should keep a comment written after a comma ==
+a = [
+  1, # one
+  2,
+]
+
+[expect]
+a = [
+  1, # one
+  2,
+]
+
+== should expand an array that holds a comment even when it would fit ==
+a = [1,
+  # note
+  2]
+
+[expect]
+a = [
+  1,
+  # note
+  2,
+]
+
+== should keep comments in an array nested in an array ==
+a = [
+  [
+    # inner
+    1,
+  ],
+  # outer
+  2,
+]
+
+[expect]
+a = [
+  [
+    # inner
+    1,
+  ],
+  # outer
+  2,
+]
+
+== should keep a comment in an array nested in a single-line inline table ==
+a = { b = [
+  1, # one
+  2,
+] }
+
+[expect]
+a = { b = [1, # one
+2] }
+
+== should keep a comment before the closing bracket of an array in a single-line table ==
+a = { b = [
+  1,
+  # done
+] }
+
+[expect]
+a = { b = [1 # done
+] }

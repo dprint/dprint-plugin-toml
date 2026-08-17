@@ -1,0 +1,51 @@
+== should keep comments around each array of tables entry ==
+# about the list
+[[list]]
+# about a
+a = 1 # trailing a
+
+# between entries
+[[list]]
+b = 2
+# closing the second
+
+[expect]
+# about the list
+[[list]]
+# about a
+a = 1 # trailing a
+
+# between entries
+[[list]]
+b = 2
+# closing the second
+
+== should keep a trailing comment on an array of tables header ==
+[[list]] # first
+a = 1
+
+[[list]] # second
+b = 2
+
+[expect]
+[[list]] # first
+a = 1
+
+[[list]] # second
+b = 2
+
+== should keep a comment between a subtable and its parent entry ==
+[[list]]
+a = 1
+
+# about the subtable
+[list.sub]
+b = 2
+
+[expect]
+[[list]]
+a = 1
+
+# about the subtable
+[list.sub]
+b = 2

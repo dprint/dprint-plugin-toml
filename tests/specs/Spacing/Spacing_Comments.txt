@@ -1,0 +1,28 @@
+~~ spaceSurroundingEquals: false, inlineTable.spaceSurroundingBraces: false ~~
+== should keep a trailing comment separated from the value ==
+a = 1 # about a
+b = { c = 1 } # about b
+
+[expect]
+a=1 # about a
+b={c=1} # about b
+
+== should not pad the braces of a table that a comment expands ==
+a = {
+  b = 1, # one
+  c = 2,
+}
+
+[expect]
+a={
+  b=1, # one
+  c=2,
+}
+
+== should keep a comment on its own line above an entry ==
+# about a
+a = 1
+
+[expect]
+# about a
+a=1

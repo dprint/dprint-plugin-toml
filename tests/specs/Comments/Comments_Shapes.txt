@@ -1,0 +1,45 @@
+== should keep an empty comment ==
+a = 1
+#
+b = 2
+
+[expect]
+a = 1
+#
+b = 2
+
+== should force a leading space after the hashbang of a #! comment ==
+#!/usr/bin/env something
+a = 1
+
+[expect]
+#! /usr/bin/env something
+a = 1
+
+== should keep a comment made only of hashes ==
+####
+a = 1
+
+[expect]
+####
+a = 1
+
+== should keep unicode in a comment ==
+a = 1 # héllo — wörld ✓
+
+[expect]
+a = 1 # héllo — wörld ✓
+
+== should not wrap a comment that runs past the line width ==
+a = 1 # this comment is deliberately far longer than the configured line width so that it would have to wrap if the formatter ever wrapped comments, which it does not
+
+[expect]
+a = 1 # this comment is deliberately far longer than the configured line width so that it would have to wrap if the formatter ever wrapped comments, which it does not
+
+== should trim trailing spaces from a comment ==
+a = 1 # spaced   
+# own line   
+
+[expect]
+a = 1 # spaced
+# own line

@@ -1,0 +1,61 @@
+~~ sortArrays: true, sortInlineTables: true, preferSingleLine: true ~~
+== should honour blank line runs in an array a comment keeps expanded ==
+a = [
+  "d",
+  "c", # about c
+
+  "b",
+  "a",
+]
+
+[expect]
+a = [
+  "c", # about c
+  "d",
+
+  "a",
+  "b",
+]
+
+== should sort as one run when no comment keeps the array expanded ==
+a = [
+  "d",
+  "c",
+
+  "b",
+  "a",
+]
+
+[expect]
+a = ["a", "b", "c", "d"]
+
+== should sort an array inside a single-line table as one run, keeping its comments ==
+x = { a = [
+  "d",
+  "c",
+
+  "b", # about b
+  "a",
+] }
+
+[expect]
+x = { a = ["a", "b", # about b
+"c", "d"] }
+
+== should keep an inline table expanded and sorted when it holds a comment ==
+a = {
+  d = 1,
+  c = 2, # about c
+
+  b = 3,
+  a = 4,
+}
+
+[expect]
+a = {
+  c = 2, # about c
+  d = 1,
+
+  a = 4,
+  b = 3,
+}

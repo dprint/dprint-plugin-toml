@@ -1,0 +1,96 @@
+~~ indentTables: always, indentEntries: always ~~
+== should indent a comment with the item it introduces ==
+[a]
+# about key
+key = 1
+[a.b]
+# about nested
+nested = 2
+
+[expect]
+[a]
+  # about key
+  key = 1
+  [a.b]
+    # about nested
+    nested = 2
+
+== should indent a comment closing a section with that section ==
+[a]
+key = 1
+[a.b]
+nested = 2
+# that is all
+
+[expect]
+[a]
+  key = 1
+  [a.b]
+    nested = 2
+    # that is all
+
+== should indent a comment introducing a table with that table ==
+[a]
+key = 1
+
+# about b
+[a.b]
+nested = 2
+
+[expect]
+[a]
+  key = 1
+
+  # about b
+  [a.b]
+    nested = 2
+
+== should indent a section holding only comments ==
+[a]
+[a.b]
+# only this
+
+[expect]
+[a]
+  [a.b]
+    # only this
+
+== should not indent a comment above the first table header ==
+# preamble
+top = 1
+
+[a]
+key = 2
+
+[expect]
+# preamble
+top = 1
+
+[a]
+  key = 2
+
+== should keep a trailing comment on an indented header ==
+[a]
+[a.b] # about b
+key = 1 # about key
+
+[expect]
+[a]
+  [a.b] # about b
+    key = 1 # about key
+
+== should not indent the body of a multi-line string in an indented table ==
+[a]
+[a.b]
+text = '''
+line one
+line two
+'''
+
+[expect]
+[a]
+  [a.b]
+    text = '''
+line one
+line two
+'''

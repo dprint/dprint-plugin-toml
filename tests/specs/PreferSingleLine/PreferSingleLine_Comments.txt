@@ -1,0 +1,113 @@
+~~ preferSingleLine: true ~~
+== should keep an array expanded for a comment after the opening bracket ==
+a = [ # note
+  1,
+  2,
+]
+
+[expect]
+a = [ # note
+  1,
+  2,
+]
+
+== should keep an array expanded for a comment above a value ==
+a = [
+  1,
+  # about two
+  2,
+]
+
+[expect]
+a = [
+  1,
+  # about two
+  2,
+]
+
+== should keep an array expanded for a trailing comment on a value ==
+a = [
+  1, # one
+  2,
+]
+
+[expect]
+a = [
+  1, # one
+  2,
+]
+
+== should keep an array expanded for a comment before the closing bracket ==
+a = [
+  1,
+  2,
+  # done
+]
+
+[expect]
+a = [
+  1,
+  2,
+  # done
+]
+
+== should keep an inline table expanded for a comment anywhere in it ==
+a = {
+  b = 1, # one
+  c = 2,
+}
+d = {
+  # only a comment
+}
+
+[expect]
+a = {
+  b = 1, # one
+  c = 2,
+}
+d = {
+  # only a comment
+}
+
+== should keep an inline table expanded for a comment in a nested table ==
+a = {
+  b = {
+    c = 1, # deep
+  },
+}
+
+[expect]
+a = {
+  b = {
+    c = 1, # deep
+  },
+}
+
+== should collapse an array whose only comment sits inside a nested array ==
+a = [
+  [
+    1, # deep
+  ],
+]
+
+[expect]
+a = [
+  [
+    1, # deep
+  ],
+]
+
+== should collapse a comment-free collection nested beside a commented one ==
+a = {
+  b = [
+    1,
+    2,
+  ],
+  c = 3, # note
+}
+
+[expect]
+a = {
+  b = [1, 2],
+  c = 3, # note
+}

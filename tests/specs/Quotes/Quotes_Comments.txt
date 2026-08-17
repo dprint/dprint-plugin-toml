@@ -1,0 +1,34 @@
+~~ quoteStyle: preferSingle ~~
+== should not rewrite the quotes inside a comment ==
+a = "x" # it is "quoted" and 'single'
+
+[expect]
+a = 'x' # it is "quoted" and 'single'
+
+== should not treat a hash inside a string as starting a comment ==
+a = "has # inside"
+b = "has # inside" # real comment
+
+[expect]
+a = 'has # inside'
+b = 'has # inside' # real comment
+
+== should requote values in a collection that holds comments ==
+a = [
+  "one", # about one
+  "two",
+]
+
+[expect]
+a = [
+  'one', # about one
+  'two',
+]
+
+== should leave a comment that looks like a string alone ==
+# a = "not an entry"
+a = "real"
+
+[expect]
+# a = "not an entry"
+a = 'real'
