@@ -103,7 +103,7 @@
       }]
     },
     "sortKeys": {
-      "description": "Whether to alphabetically sort the entries of each table. Entries separated by a blank line are sorted within their own run, and table headers are never moved. A comment travels with the entry written beneath it, except for the comments at the very top of a run, which are treated as a heading for that run and stay there.",
+      "description": "Whether to alphabetically sort the entries of each table. Entries separated by a blank line are sorted within their own run, and table headers are never moved. A comment travels with the entry written beneath it, unless a blank line sets it apart -- either above it or between it and the entry -- which marks it as a heading for the run and keeps it at the top.",
       "type": "boolean",
       "default": false,
       "oneOf": [{
@@ -115,7 +115,7 @@
       }]
     },
     "sortArrays": {
-      "description": "Whether to alphabetically sort the values of an array. Values separated by a blank line are sorted within their own run, unless the array is written on a single line, which leaves nowhere to keep those dividers. An array holding an array or inline table is left alone. A comment travels with the value written beneath it, except for the comments at the very top of a run, which are treated as a heading for that run and stay there. Note that this changes the meaning of a document whose array order is significant.",
+      "description": "Whether to alphabetically sort the values of an array. Values separated by a blank line are sorted within their own run, unless the array is written on a single line, which leaves nowhere to keep those dividers. An array holding an array or inline table is left alone. A comment travels with the value written beneath it, unless a blank line sets it apart -- either above it or between it and the value -- which marks it as a heading for the run and keeps it at the top. Note that this changes the meaning of a document whose array order is significant.",
       "type": "boolean",
       "default": false,
       "oneOf": [{
@@ -127,7 +127,7 @@
       }]
     },
     "sortInlineTables": {
-      "description": "Whether to alphabetically sort the entries of an inline table. A comment travels with the entry written beneath it, except for the comments at the very top of a run, which are treated as a heading for that run and stay there.",
+      "description": "Whether to alphabetically sort the entries of an inline table. A comment travels with the entry written beneath it, unless a blank line sets it apart -- either above it or between it and the entry -- which marks it as a heading for the run and keeps it at the top.",
       "type": "boolean",
       "default": false,
       "oneOf": [{

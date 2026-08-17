@@ -118,8 +118,8 @@ c = "4"
 
 [expect]
 [dependencies]
-# 1
 a = "1"
+# 1
 b = "2"
 
 # 2

@@ -51,15 +51,45 @@ c = 2
 c = 2
 d = 1
 
-== should keep a comment heading a run at the top of it ==
+== should move a comment written flush against the run's first entry with that entry ==
+[a]
+# about d
+d = 1
+c = 2
+
+[expect]
+[a]
+c = 2
+# about d
+d = 1
+
+== should keep a comment set off by a blank line above it at the top of its run ==
+[a]
+x = 1
+
+# the section
+d = 2
+c = 3
+
+[expect]
+[a]
+x = 1
+
+# the section
+c = 3
+d = 2
+
+== should keep a comment set off by a blank line beneath it at the top of its run ==
 [a]
 # the section
+
 d = 1
 c = 2
 
 [expect]
 [a]
 # the section
+
 c = 2
 d = 1
 

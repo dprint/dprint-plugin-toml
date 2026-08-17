@@ -292,9 +292,11 @@ pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cm
 /// Sorts `units` in place, treating a blank line as a divider the author put there deliberately:
 /// each run between blank lines is sorted on its own and runs never move past each other.
 ///
-/// The comments above a run's first entry are treated as belonging to the run rather than to that
-/// entry, so a heading like `# exts` stays at the top of its run instead of being carried off to
-/// wherever its entry happens to sort.
+/// The comments above a run's first entry belong to the run rather than to that entry when a blank
+/// line sets them apart -- either above them or between them and the entry beneath. A heading like
+/// `# exts` then stays at the top of its run instead of being carried off to wherever its entry
+/// happens to sort. Comments written flush against their entry, with nothing separating them from
+/// what came before, are that entry's own and travel with it.
 fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
   let mut group_start = 0;
   while group_start < units.len() {
@@ -304,11 +306,20 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
     }
 
     let group = &mut units[group_start..group_end];
-    // The group's leading comments belong to the group rather than to the entry they sat above, so
-    // they stay at its top. Any blank line beneath them is part of that heading and travels with it.
-    let group_comments = std::mem::take(&mut group[0].leading_comments);
+    // A blank line above the group's comments, or between them and the entry beneath, marks them
+    // as a heading for the group rather than a note about that one entry, so they stay at its top.
+    // Any blank line beneath them is part of that heading and travels with it. Only the group's
+    // first unit can carry either blank, since a later one would have started a group of its own.
+    let is_heading = group[0].leading_blank || group[0].inner_blank;
     let leading_blank = group[0].leading_blank;
-    let inner_blank = std::mem::replace(&mut group[0].inner_blank, false);
+    let (group_comments, inner_blank) = if is_heading {
+      (
+        std::mem::take(&mut group[0].leading_comments),
+        std::mem::replace(&mut group[0].inner_blank, false),
+      )
+    } else {
+      (Vec::new(), false)
+    };
 
     group.sort_by(|left, right| cmp(&left.value, &right.value));
 
@@ -316,12 +327,14 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
       unit.leading_blank = false;
     }
     let head = &mut group[0];
-    match head.leading_comments.first_mut() {
-      // the blank now separates the group's heading from the comments of whichever entry sorted first
-      Some(first) => first.blank_line_before = inner_blank,
-      None => head.inner_blank = inner_blank,
+    if is_heading {
+      match head.leading_comments.first_mut() {
+        // the blank now separates the group's heading from the comments of whichever entry sorted first
+        Some(first) => first.blank_line_before = inner_blank,
+        None => head.inner_blank = inner_blank,
+      }
+      head.leading_comments.splice(0..0, group_comments);
     }
-    head.leading_comments.splice(0..0, group_comments);
     head.leading_blank = leading_blank;
 
     group_start = group_end;

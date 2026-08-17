@@ -724,8 +724,8 @@ members = [
 [expect]
 [workspace]
 members = [
-  # members
   "member1",
+  # members
   "member2",
 
   "asdf",
