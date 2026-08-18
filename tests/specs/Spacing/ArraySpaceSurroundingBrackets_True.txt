@@ -30,7 +30,11 @@ c = { d = [ # after open
 1, 2] }
 
 [expect]
-a = { b = [ # lead
-1 ] }
+a = { b = [
+  # lead
+  1,
+] }
 c = { d = [ # after open
-1, 2 ] }
+  1,
+  2,
+] }

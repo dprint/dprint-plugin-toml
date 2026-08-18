@@ -17,7 +17,7 @@ pub fn apply_sorting(root: &mut Root, config: &Configuration) {
   if config.sort_arrays || config.sort_inline_tables {
     for item in &mut root.items {
       if let RootItem::Entry(entry) = item {
-        sort_within_value(&mut entry.value, config, false);
+        sort_within_value(&mut entry.value, config, LineContext::default());
       }
     }
   }
@@ -37,14 +37,14 @@ fn sort_root_keys(root: &mut Root) {
   }
 }
 
-/// `within_single_line` is whether an enclosing inline table is written on a single line, which
-/// collapses everything inside it onto that line however it was written.
-fn sort_within_value(value: &mut Value, config: &Configuration, within_single_line: bool) {
+fn sort_within_value(value: &mut Value, config: &Configuration, line: LineContext) {
   match &mut value.kind {
     ValueKind::Array(array) => {
-      let single_line = within_single_line || !array.force_use_new_lines(config);
+      // an array collapsed onto its table's line keeps nothing that could divide it into runs
+      let single_line = line.arrays_collapsed || !array.force_use_new_lines(config);
       for item in &mut array.values {
-        sort_within_value(&mut item.value, config, single_line);
+        // a table reached through an array is still kept on the enclosing table's line
+        sort_within_value(&mut item.value, config, line);
       }
       // Only the text of a value decides where it sorts, so an array holding one that has no text
       // of its own — another array, or an inline table — is left alone rather than being
@@ -57,9 +57,13 @@ fn sort_within_value(value: &mut Value, config: &Configuration, within_single_li
       }
     }
     ValueKind::InlineTable(table) => {
-      let single_line = within_single_line || !table.force_use_new_lines(config);
+      let single_line = line.within_single_line_table || !table.force_use_new_lines(config);
+      let inner = LineContext {
+        within_single_line_table: single_line,
+        arrays_collapsed: line.arrays_collapsed || (single_line && table.contains_multi_line_string()),
+      };
       for entry in &mut table.entries {
-        sort_within_value(&mut entry.value, config, single_line);
+        sort_within_value(&mut entry.value, config, inner);
       }
       if config.sort_inline_tables {
         if single_line {

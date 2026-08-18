@@ -119,8 +119,12 @@ c = { d = "x", e = ["f", "g" # note
 ] }
 
 [expect]
-a = { b = [1, # one
-2] }
-c = { d = "x", e = ["f", "g" # note
+a = { b = [
+  1, # one
+  2,
+] }
+c = { d = "x", e = [
+  "f",
+  "g", # note
   # more
 ] }

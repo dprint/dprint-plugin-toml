@@ -29,7 +29,7 @@ a = [
 [expect]
 a = ["a", "b", "c", "d"]
 
-== should sort an array inside a single-line table as one run, keeping its comments ==
+== should honour the runs of an array inside a single-line table, keeping its comments ==
 x = { a = [
   "d",
   "c",
@@ -39,8 +39,13 @@ x = { a = [
 ] }
 
 [expect]
-x = { a = ["a", "b", # about b
-"c", "d"] }
+x = { a = [
+  "c",
+  "d",
+
+  "a",
+  "b", # about b
+] }
 
 == should keep an inline table expanded and sorted when it holds a comment ==
 a = {

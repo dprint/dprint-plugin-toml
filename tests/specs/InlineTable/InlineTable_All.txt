@@ -11,7 +11,7 @@ point = { x = 1, y = 2 }
 animal = { type.name = "pug" }
 empty = {} # comment
 
-== should not break up an array in an inline table ==
+== should break up an array in an inline table that runs past the line width ==
 name = { version = "0.1.0", features = ["feature1",   "feature2", "feature3"] }
 other = { version = "0.1.0", features = [
     "feature1",
@@ -20,8 +20,16 @@ other = { version = "0.1.0", features = [
 ] }
 
 [expect]
-name = { version = "0.1.0", features = ["feature1", "feature2", "feature3"] }
-other = { version = "0.1.0", features = ["feature1", "feature2", "feature3"] }
+name = { version = "0.1.0", features = [
+  "feature1",
+  "feature2",
+  "feature3",
+] }
+other = { version = "0.1.0", features = [
+  "feature1",
+  "feature2",
+  "feature3",
+] }
 
 == should preserve newlines within a multi-line string in an inline table ==
 a = { b = """
