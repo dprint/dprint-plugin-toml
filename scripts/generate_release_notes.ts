@@ -23,7 +23,7 @@ Then in your project's dprint configuration file:
        // toml config goes here
      },
      "plugins": [
-       "https://plugins.dprint.dev/toml-${version}.wasm"
+       "npm:@dprint/toml@${version}"
      ]
    }
    \`\`\`
