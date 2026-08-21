@@ -14,8 +14,6 @@ Then in your project's directory with a dprint.json file, run:
 
 ```shellsession
 dprint add toml
-# or install from npm
-dprint add npm:@dprint/toml
 ```
 
 See https://dprint.dev/plugins/toml/ for more information including [configuration](https://dprint.dev/plugins/toml/config/).
