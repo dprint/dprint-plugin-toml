@@ -1,6 +1,6 @@
 # dprint-plugin-toml
 
-[![](https://img.shields.io/crates/v/dprint-plugin-toml.svg)](https://crates.io/crates/dprint-plugin-toml) [![CI](https://github.com/dprint/dprint-plugin-toml/workflows/CI/badge.svg)](https://github.com/dprint/dprint-plugin-toml/actions?query=workflow%3ACI)
+[![](https://img.shields.io/crates/v/dprint-plugin-toml.svg)](https://crates.io/crates/dprint-plugin-toml) [![npm version](https://img.shields.io/npm/v/@dprint/toml.svg)](https://www.npmjs.com/package/@dprint/toml) [![CI](https://github.com/dprint/dprint-plugin-toml/workflows/CI/badge.svg)](https://github.com/dprint/dprint-plugin-toml/actions?query=workflow%3ACI)
 
 [TOML](https://toml.io/) formatting plugin for [dprint](https://github.com/dprint/dprint).
 
