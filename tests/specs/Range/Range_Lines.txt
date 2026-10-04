@@ -1,0 +1,312 @@
+== should only format the touched entry ==
+a   =   1
+[|b   =   2|]
+c   =   3
+
+[expect]
+a   =   1
+[|b = 2|]
+c   =   3
+
+== should format the entry a cursor is in ==
+a   =   1
+b   =  [||] 2
+c   =   3
+
+[expect]
+a   =   1
+b = [||]2
+c   =   3
+
+== should format the entry a cursor is in the indentation of ==
+a   =   1
+  [||]  b   =   2
+c   =   3
+
+[expect]
+a   =   1
+[||]b = 2
+c   =   3
+
+== should format the entry a cursor is at the end of ==
+a   =   1
+b   =   2[||]
+c   =   3
+
+[expect]
+a   =   1
+b = 2[||]
+c   =   3
+
+== should format the first entry when the cursor is at the start of the file ==
+[||]a   =   1
+b   =   2
+
+[expect]
+[||]a = 1
+b   =   2
+
+== should format several touched items along with the blank lines between them ==
+a   =   1
+b   =  [|2
+
+
+
+#comment
+[ table ]|]
+c   =   3
+
+[expect]
+a   =   1
+[|b = 2
+
+# comment
+[table]|]
+c   =   3
+
+== should keep the blank lines around the touched items ==
+a   =   1
+
+
+
+[|b   =   2|]
+
+
+
+c   =   3
+
+[expect]
+a   =   1
+
+
+
+[|b = 2|]
+
+
+
+c   =   3
+
+== should not format when only touching blank lines ==
+a   =   1
+[|
+
+|]
+b   =   2
+
+[expect]
+a   =   1
+[|
+
+|]
+b   =   2
+
+== should not format when the cursor is on a blank line ==
+a   =   1
+[||]
+b   =   2
+
+[expect]
+a   =   1
+[||]
+b   =   2
+
+== should not format the blank lines the range ends in ==
+a   =   1
+[|b   =   2
+
+
+|]
+
+c   =   3
+
+[expect]
+a   =   1
+[|b = 2
+
+
+|]
+
+c   =   3
+
+== should not format the next line when the range ends in its indentation ==
+a   =   1
+[|b   =   2
+  |]  c   =   3
+
+[expect]
+a   =   1
+[|b = 2
+  |]  c   =   3
+
+== should not format the previous line when the range starts at its end ==
+a   =   1[|
+b   =   2|]
+c   =   3
+
+[expect]
+a   =   1[|
+b = 2|]
+c   =   3
+
+== should not format the next line when the range ends at its start ==
+a   =   1
+[|b   =   2
+|]c   =   3
+
+[expect]
+a   =   1
+[|b = 2
+|]c   =   3
+
+== should fix the indentation of the touched line ==
+a   =   1
+      [|b   =   2|]
+    c   =   3
+
+[expect]
+a   =   1
+[|b = 2|]
+    c   =   3
+
+== should format a touched comment ==
+a   =   1
+[|#comment|]
+c   =   3
+
+[expect]
+a   =   1
+[|# comment|]
+c   =   3
+
+== should format a touched table header and its comment ==
+a   =   1
+[|[ table . name ]|]   #comment
+c   =   3
+
+[expect]
+a   =   1
+[|[table.name] # comment|]
+c   =   3
+
+== should format the trailing comment of a touched entry ==
+a   =   1
+b   =   2   [|#comment|]
+c   =   3
+
+[expect]
+a   =   1
+b = 2 [|# comment|]
+c   =   3
+
+== should format all the lines of a touched entry ==
+a   =   1
+b   =   [
+1,[||]2,
+      { c   =   3 }]
+c   =   3
+
+[expect]
+a   =   1
+b = [
+  1,
+  [||]2,
+  { c = 3 },
+]
+c   =   3
+
+== should format an entry when touching its multi-line string ==
+a   =   1
+b   =   """
+  te[||]xt
+"""   #comment
+c   =   3
+
+[expect]
+a   =   1
+b = """
+  te[||]xt
+""" # comment
+c   =   3
+
+== should format the first entry without the blank lines above it ==
+
+
+[|a   =   1|]
+b   =   2
+
+[expect]
+
+
+[|a = 1|]
+b   =   2
+
+== should format the whole file when touching the first and last items ==
+
+
+a   =  [|1
+b   =   2
+
+
+
+c   =|]   3
+
+[expect]
+a = 1
+b = 2
+
+c = 3
+
+== should format the whole file when touching its only item ==
+
+
+[|a   =   1|]
+
+[expect]
+a = 1
+
+== should format the last entry without the blank lines beneath it ==
+a   =   1
+[|b   =   2|]
+
+
+[expect]
+a   =   1
+[|b = 2|]
+
+
+== should keep the blank line between an untouched table header and a touched entry ==
+[table]
+
+[|a   =   1|]
+b   =   2
+
+[expect]
+[table]
+
+[|a = 1|]
+b   =   2
+
+== should keep the blank line between a touched table header and an untouched entry ==
+a   =   1
+[|[ table ]|]
+
+b   =   2
+
+[expect]
+a   =   1
+[|[table]|]
+
+b   =   2
+
+== should remove the blank line beneath a table header when touching what is on both sides of it ==
+a   =   1
+[|[ table ]
+
+#comment|]
+b   =   2
+
+[expect]
+a   =   1
+[|[table]
+# comment|]
+b   =   2

@@ -1,0 +1,311 @@
+~~ sortKeys: true ~~
+== should only format the touched entry when sorting doesn't move it ==
+b   =   2
+a   =   1
+[|c   =   3|]
+
+[table]
+z   =   1
+
+[expect]
+b   =   2
+a   =   1
+[|c = 3|]
+
+[table]
+z   =   1
+
+== should format the table when sorting moves the touched entry ==
+[first]
+z   =   1
+y   =   2
+
+[ table ]
+c   =   3
+[|a   =   1|]
+b   =   2
+
+[other]
+z   =   1
+y   =   2
+
+[expect]
+[first]
+z   =   1
+y   =   2
+
+[ table ]
+[|a = 1|]
+b = 2
+c = 3
+
+[other]
+z   =   1
+y   =   2
+
+== should format the entries above the first table when sorting moves a touched one ==
+c   =   3
+[|a   =   1|]
+
+[table]
+z   =   1
+
+[expect]
+[|a = 1|]
+c = 3
+
+[table]
+z   =   1
+
+== should format the table when sorting moves a touched comment ==
+[table]
+b   =   2
+[|#comment|]
+a   =   1
+
+[other]
+z   =   1
+
+[expect]
+[table]
+[|# comment|]
+a = 1
+b = 2
+
+[other]
+z   =   1
+
+== should format each table the touched items are in when sorting moves one ==
+[a]
+z   =   1
+y   =  [|2
+
+[ b ]
+d   =   4|]
+c   =   3
+
+[c]
+z   =   1
+y   =   2
+
+[expect]
+[a]
+[|y = 2
+z = 1
+
+[b]
+c = 3
+d = 4|]
+
+[c]
+z   =   1
+y   =   2
+
+== should format the whole file when sorting moves a touched entry of its only table ==
+c   =   3
+[|a   =   1|]
+
+[expect]
+a = 1
+c = 3
+
+== should only format a touched heading comment when the entries beneath it would move ==
+[table]
+[|#heading|]
+
+b   =   2
+a   =   1
+
+[expect]
+[table]
+[|# heading|]
+
+b   =   2
+a   =   1
+
+== should keep a heading comment at the top when sorting moves a touched entry ==
+[first]
+z   =   1
+
+[table]
+#heading
+
+[|b   =   2|]
+a   =   1
+
+[other]
+z   =   1
+
+[expect]
+[first]
+z   =   1
+
+[table]
+#heading
+
+a = 1
+[|b = 2|]
+
+[other]
+z   =   1
+
+== should move a comment with the touched entry it is above ==
+[table]
+b   =   2
+#comment
+[|a   =   1|]
+
+[other]
+z   =   1
+
+[expect]
+[table]
+# comment
+[|a = 1|]
+b = 2
+
+[other]
+z   =   1
+
+== should only format the group of the table that sorting moves a touched entry of ==
+[table]
+z   =   1
+y   =   2
+
+d   =   4
+[|c   =   3|]
+
+b   =   2
+a   =   1
+
+[other]
+z   =   1
+
+[expect]
+[table]
+z   =   1
+y   =   2
+
+[|c = 3|]
+d = 4
+
+b   =   2
+a   =   1
+
+[other]
+z   =   1
+
+== should only format the touched element of an array of tables ==
+[[table]]
+b   =   1
+a   =   2
+
+[[table]]
+[|d   =   1|]
+c   =   2
+
+[[table]]
+f   =   1
+e   =   2
+
+[expect]
+[[table]]
+b   =   1
+a   =   2
+
+[[table]]
+c = 2
+[|d = 1|]
+
+[[table]]
+f   =   1
+e   =   2
+
+== should format the entries sorting moves along with a touched table header ==
+[first]
+z   =   1
+
+[|[ table ]
+b   =   2|]
+a   =   1
+
+[other]
+z   =   1
+
+[expect]
+[first]
+z   =   1
+
+[|[table]
+a = 1
+b = 2|]
+
+[other]
+z   =   1
+
+== should only format a touched comment at the end of a table whose entries would move ==
+[table]
+c   =   3
+a   =   1
+[|#comment|]
+
+[other]
+z   =   1
+
+[expect]
+[table]
+c   =   3
+a   =   1
+[|# comment|]
+
+[other]
+z   =   1
+
+== should keep the blank line beneath the table header when sorting moves a touched entry ==
+[first]
+z   =   1
+
+[table]
+
+[|b   =   2|]
+a   =   1
+
+[other]
+z   =   1
+
+[expect]
+[first]
+z   =   1
+
+[table]
+
+a = 1
+[|b = 2|]
+
+[other]
+z   =   1
+
+== should format the table when removing the blank line above a heading comment changes what it is above ==
+[first]
+z   =   1
+
+[|[ table ]
+
+#comment|]
+m   =   1
+a   =   2
+
+[other]
+z   =   1
+
+[expect]
+[first]
+z   =   1
+
+[|[table]
+# comment|]
+a = 2
+m = 1
+
+[other]
+z   =   1

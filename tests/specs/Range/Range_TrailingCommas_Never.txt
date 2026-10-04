@@ -1,0 +1,24 @@
+~~ trailingCommas: never ~~
+== should only remove the trailing comma of the touched array ==
+a   =   [
+  1,
+]
+[|b   =   [
+1,
+2,
+]|]
+c   =   [
+  1,
+]
+
+[expect]
+a   =   [
+  1,
+]
+[|b = [
+  1,
+  2
+]|]
+c   =   [
+  1,
+]

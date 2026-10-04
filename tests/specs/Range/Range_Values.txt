@@ -1,0 +1,296 @@
+== should format a touched basic string ==
+a   =   1
+[|b   =   "text \" # not a comment"|]   #comment
+c   =   3
+
+[expect]
+a   =   1
+[|b = "text \" # not a comment" # comment|]
+c   =   3
+
+== should format a touched literal string ==
+a   =   1
+[|b   =   'C:\text # not a comment'|]   #comment
+c   =   3
+
+[expect]
+a   =   1
+[|b = 'C:\text # not a comment' # comment|]
+c   =   3
+
+== should format a touched multi-line basic string without changing its text ==
+a   =   1
+[|b   =   """
+    text   =   1
+  [ not . a . table ]
+#not a comment
+"""|]   #comment
+c   =   3
+
+[expect]
+a   =   1
+[|b = """
+    text   =   1
+  [ not . a . table ]
+#not a comment
+"""|] # comment
+c   =   3
+
+== should format a touched multi-line literal string without changing its text ==
+a   =   1
+[|b   =   '''
+    text   =   1
+  [ not . a . table ]
+#not a comment
+'''|]   #comment
+c   =   3
+
+[expect]
+a   =   1
+[|b = '''
+    text   =   1
+  [ not . a . table ]
+#not a comment
+'''|] # comment
+c   =   3
+
+== should format an entry when only touching a line within its multi-line string ==
+a   =   1
+    b   =   """
+    text   =   1
+  [|[ not . a . table ]|]
+"""
+c   =   3
+
+[expect]
+a   =   1
+b = """
+    text   =   1
+  [|[ not . a . table ]|]
+"""
+c   =   3
+
+== should not format the entry beneath a multi-line string when the range ends in the string ==
+a   =   [|1
+b   =   """
+text|]
+"""
+c   =   3
+
+[expect]
+a = [|1
+b = """
+text|]
+"""
+c   =   3
+
+== should format touched integers ==
+a   =   1
+[|b   =   +99
+c   =   1_000
+d   =   0xDEADBEEF
+e   =   0o755
+f   =   0b11010110|]
+g   =   3
+
+[expect]
+a   =   1
+[|b = +99
+c = 1_000
+d = 0xDEADBEEF
+e = 0o755
+f = 0b11010110|]
+g   =   3
+
+== should format touched floats ==
+a   =   1
+[|b   =   +1.0
+c   =   5e+22
+d   =   6.626e-34
+e   =   -inf
+f   =   nan|]
+g   =   3
+
+[expect]
+a   =   1
+[|b = +1.0
+c = 5e+22
+d = 6.626e-34
+e = -inf
+f = nan|]
+g   =   3
+
+== should format touched booleans ==
+a   =   1
+[|b   =   true
+c   =   false|]
+d   =   3
+
+[expect]
+a   =   1
+[|b = true
+c = false|]
+d   =   3
+
+== should format touched dates and times ==
+a   =   1
+[|b   =   1979-05-27T07:32:00Z
+c   =   1979-05-27 07:32:00-07:00
+d   =   1979-05-27T00:32:00.999999
+e   =   1979-05-27
+f   =   07:32:00|]
+g   =   3
+
+[expect]
+a   =   1
+[|b = 1979-05-27T07:32:00Z
+c = 1979-05-27 07:32:00-07:00
+d = 1979-05-27T00:32:00.999999
+e = 1979-05-27
+f = 07:32:00|]
+g   =   3
+
+== should format a touched single line array ==
+a   =   [  1,2  ]
+[|b   =   [  1,2  ,  [  3,4  ]  ]|]
+c   =   [  1,2  ]
+
+[expect]
+a   =   [  1,2  ]
+[|b = [1, 2, [3, 4]]|]
+c   =   [  1,2  ]
+
+== should format a touched empty array ==
+a   =   [  ]
+[|b   =   [  ]|]
+c   =   [  ]
+
+[expect]
+a   =   [  ]
+[|b = []|]
+c   =   [  ]
+
+== should format a touched multi-line array ==
+a   =   [
+1,2]
+[|b   =   [
+1,2  ,  [
+3,4  ]  ]|]
+c   =   [
+1,2]
+
+[expect]
+a   =   [
+1,2]
+[|b = [
+  1,
+  2,
+  [
+    3,
+    4,
+  ],
+]|]
+c   =   [
+1,2]
+
+== should format all of a multi-line array when touching one of its values ==
+a   =   [
+1,2]
+b   =   [
+1,
+      [|2|]  ,
+3]
+c   =   [
+1,2]
+
+[expect]
+a   =   [
+1,2]
+b = [
+  1,
+  [|2|],
+  3,
+]
+c   =   [
+1,2]
+
+== should format all of a multi-line array when the cursor is before its closing bracket ==
+a   =   1
+b   =   [
+1,
+      2
+      [||]]
+c   =   3
+
+[expect]
+a   =   1
+b = [
+  1,
+  2,
+[||]]
+c   =   3
+
+== should format an array that exceeds the line width ==
+a   =   1
+[|b   =   ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddd"]|]
+c   =   3
+
+[expect]
+a   =   1
+[|b = [
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "cccccccccccccccccccccccccccccc",
+  "dddddddddddddddddddddddddddddddddd",
+]|]
+c   =   3
+
+== should format a touched inline table ==
+a   =   {x=1,y=2}
+[|b   =   {x=1,y  =  {  z = [  1,2  ]  }}|]
+c   =   {x=1,y=2}
+
+[expect]
+a   =   {x=1,y=2}
+[|b = { x = 1, y = { z = [1, 2] } }|]
+c   =   {x=1,y=2}
+
+== should format a touched empty inline table ==
+a   =   {  }
+[|b   =   {  }|]
+c   =   {  }
+
+[expect]
+a   =   {  }
+[|b = {}|]
+c   =   {  }
+
+== should format all of a multi-line inline table when touching one of its entries ==
+a   =   1
+b   =   {
+x   =   1,
+      [|y   =   2|] }
+c   =   3
+
+[expect]
+a   =   1
+b = {
+  x = 1,
+  [|y = 2|],
+}
+c   =   3
+
+== should format an array of inline tables ==
+a   =   1
+[|b   =   [
+{x=1,y=2},
+      {x=3,y=4}]|]
+c   =   3
+
+[expect]
+a   =   1
+[|b = [
+  { x = 1, y = 2 },
+  { x = 3, y = 4 },
+]|]
+c   =   3

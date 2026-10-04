@@ -1,0 +1,19 @@
+-- Cargo.toml --
+~~ cargo.applyConventions: false ~~
+== should only format the touched entry ==
+[package]
+edition   =   "2021"
+name   =   "a"
+
+[dependencies]
+[|b   =   "1"|]
+a   =   "1"
+
+[expect]
+[package]
+edition   =   "2021"
+name   =   "a"
+
+[dependencies]
+[|b = "1"|]
+a   =   "1"

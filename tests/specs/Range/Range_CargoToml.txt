@@ -1,0 +1,160 @@
+-- Cargo.toml --
+== should only format the touched entry when the conventions don't move it ==
+[package]
+name   =   "a"
+[|version   =   "0.1.0"|]
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+a   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+[|version = "0.1.0"|]
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+a   =   "1"
+
+== should format the table when the conventions move the touched entry ==
+[package]
+edition   =   "2021"
+name   =   "a"
+
+[dependencies]
+[|b   =   "1"|]
+a   =   "1"
+
+[dev-dependencies]
+d   =   "1"
+c   =   "1"
+
+[expect]
+[package]
+edition   =   "2021"
+name   =   "a"
+
+[dependencies]
+a = "1"
+[|b = "1"|]
+
+[dev-dependencies]
+d   =   "1"
+c   =   "1"
+
+== should sort the workspace members of a touched entry ==
+[workspace]
+resolver   =   "2"
+[|members   =   ["b", "a"]|]
+
+[expect]
+[workspace]
+resolver   =   "2"
+[|members = ["a", "b"]|]
+
+== should format the entries the conventions move along with a touched table header ==
+[workspace]
+members   =   ["a"]
+
+[|[ package ]
+version   =   "0.1.0"|]
+name   =   "a"
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+
+[expect]
+[workspace]
+members   =   ["a"]
+
+[|[package]
+name = "a"
+version = "0.1.0"|]
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+
+== should not sort an array of tables ==
+[package]
+name   =   "a"
+
+[[bin]]
+[|path   =   "a"|]
+name   =   "b"
+
+[expect]
+[package]
+name   =   "a"
+
+[[bin]]
+[|path = "a"|]
+name   =   "b"
+
+== should sort the workspace members when a cursor is in them ==
+[workspace]
+resolver   =   "2"
+members   =   [
+  "b",[||]
+  "a"
+]
+
+[package]
+name   =   "a"
+
+[expect]
+[workspace]
+resolver   =   "2"
+members = [
+  "a",[||]
+  "b",
+]
+
+[package]
+name   =   "a"
+
+== should move a comment with the dependency it is above ==
+[package]
+name   =   "a"
+
+[dependencies]
+#comment
+b   =   "1"
+[|a   =   "1"|]
+
+[dev-dependencies]
+d   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+
+[dependencies]
+[|a = "1"|]
+# comment
+b = "1"
+
+[dev-dependencies]
+d   =   "1"
+
+== should move the description of a touched package to the end ==
+[package]
+name   =   "a"
+[|description   =   "b"|]
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+edition = "2021"
+[|description = "b"|]
+
+[dependencies]
+b   =   "1"

@@ -1,0 +1,152 @@
+== should format a touched comment ==
+#a
+[|#b|]
+#c
+
+[expect]
+#a
+[|# b|]
+#c
+
+== should format the comment a cursor is in ==
+#a
+#[||]b
+#c
+
+[expect]
+#a
+# [||]b
+#c
+
+== should format touched comments along with the blank lines between them ==
+#a
+[|#b
+
+
+
+##c
+#!d|]
+#e
+
+[expect]
+#a
+[|# b
+
+## c
+#! d|]
+#e
+
+== should format the comment above an entry without the entry ==
+a   =   1
+[|#comment|]
+b   =   2
+
+[expect]
+a   =   1
+[|# comment|]
+b   =   2
+
+== should format the trailing comment of an entry along with the entry ==
+a   =   1   #a
+b   =   2   [|#b|]
+c   =   3   #c
+
+[expect]
+a   =   1   #a
+b = 2 [|# b|]
+c   =   3   #c
+
+== should format the trailing comment of a table header along with the header ==
+[ a ]   #a
+[ b ]   [|#b|]
+[ c ]   #c
+
+[expect]
+[ a ]   #a
+[b] [|# b|]
+[ c ]   #c
+
+== should format the comments within a touched array ==
+a   =   1
+[|b   =   [   #open
+#above
+1,   #after
+2   #last
+,
+#close
+]|]
+c   =   3
+
+[expect]
+a   =   1
+[|b = [ # open
+  # above
+  1, # after
+  2, # last
+  # close
+]|]
+c   =   3
+
+== should format all of an array when touching a comment within it ==
+a   =   1
+b   =   [
+      [|#above|]
+1,
+2]
+c   =   3
+
+[expect]
+a   =   1
+b = [
+  [|# above|]
+  1,
+  2,
+]
+c   =   3
+
+== should format the comments within a touched inline table ==
+a   =   1
+[|b   =   {   #open
+#above
+x   =   1,   #after
+y   =   2   #last
+,
+#close
+}|]
+c   =   3
+
+[expect]
+a   =   1
+[|b = { # open
+  # above
+  x = 1, # after
+  y = 2, # last
+  # close
+}|]
+c   =   3
+
+== should format a comment at the start of the file ==
+[|#a|]
+b   =   2
+
+[expect]
+[|# a|]
+b   =   2
+
+== should format a comment at the end of the file ==
+a   =   1
+[|#b|]
+
+[expect]
+a   =   1
+[|# b|]
+
+== should not format a comment that needs no changes ==
+#a
+[|# b|]
+#c
+
+[expect]
+#a
+[|# b|]
+#c

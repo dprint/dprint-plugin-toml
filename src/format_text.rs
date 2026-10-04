@@ -20,14 +20,15 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
   }
 }
 
-fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
+pub(crate) fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
   let text = strip_bom(text);
   let root = parse_and_process_node(file_path, text, config)?;
 
-  Ok(dprint_core::formatting::format(
-    || generate(&root, config),
-    config_to_print_options(text, config),
-  ))
+  Ok(print(&root, text, config))
+}
+
+pub(crate) fn print(root: &Root, text: &str, config: &Configuration) -> String {
+  dprint_core::formatting::format(|| generate(root, config), config_to_print_options(text, config))
 }
 
 #[cfg(feature = "tracing")]
@@ -37,24 +38,27 @@ pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprin
   dprint_core::formatting::trace_printing(|| generate(&root, config), config_to_print_options(text, config))
 }
 
-fn strip_bom(text: &str) -> &str {
+pub(crate) fn strip_bom(text: &str) -> &str {
   text.strip_prefix("\u{FEFF}").unwrap_or(text)
 }
 
 fn parse_and_process_node<'a>(file_path: &Path, text: &'a str, config: &Configuration) -> Result<Root<'a>, FormatError> {
   let mut root = parse(text)?;
+  process_node(file_path, &mut root, config);
+  Ok(root)
+}
 
-  crate::sorting::apply_sorting(&mut root, config);
+pub(crate) fn process_node(file_path: &Path, root: &mut Root, config: &Configuration) {
+  crate::sorting::apply_sorting(root, config);
 
   // after the general sorting, so that a Cargo.toml keeps its conventional order rather than an
   // alphabetical one
   if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
-    cargo::apply_cargo_toml_conventions(&mut root);
+    cargo::apply_cargo_toml_conventions(root);
   }
-  Ok(root)
 }
 
-fn parse(text: &str) -> Result<Root<'_>, ParseError> {
+pub(crate) fn parse(text: &str) -> Result<Root<'_>, ParseError> {
   parser::parse(text).map_err(|err| {
     let (start, end) = highlight_range(&err, text);
     ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(

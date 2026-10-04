@@ -1,0 +1,109 @@
+== should format a touched table header ==
+[ a ]
+[|[ b ]|]
+[ c ]
+
+[expect]
+[ a ]
+[|[b]|]
+[ c ]
+
+== should format a touched table header with a dotted key ==
+[ a ]
+[|[ b . "c d" . 'e' ]|]
+[ c ]
+
+[expect]
+[ a ]
+[|[b."c d".'e']|]
+[ c ]
+
+== should format a touched array of tables header ==
+[[ a ]]
+[|[[ b . c ]]|]
+[[ c ]]
+
+[expect]
+[[ a ]]
+[|[[b.c]]|]
+[[ c ]]
+
+== should format a table header a cursor is in ==
+[ a ]
+[ [||]b ]
+[ c ]
+
+[expect]
+[ a ]
+[[||]b]
+[ c ]
+
+== should format a table header and the entries beneath it ==
+[ a ]
+key   =   1
+
+[|[ b ]
+key   =   1
+other   =   2|]
+
+[ c ]
+key   =   1
+
+[expect]
+[ a ]
+key   =   1
+
+[|[b]
+key = 1
+other = 2|]
+
+[ c ]
+key   =   1
+
+== should format the end of one table and the start of the next ==
+[ a ]
+key   =   1
+other   =  [|2
+
+
+
+[[ b ]]
+key|]   =   1
+other   =   2
+
+[expect]
+[ a ]
+key   =   1
+[|other = 2
+
+[[b]]
+key = 1|]
+other   =   2
+
+== should format the entries above the first table ==
+[|a   =   1
+b   =   2|]
+
+[ table ]
+key   =   1
+
+[expect]
+[|a = 1
+b = 2|]
+
+[ table ]
+key   =   1
+
+== should format an empty table between other tables ==
+[ a ]
+key   =   1
+[|[ b ]|]
+[ c ]
+key   =   1
+
+[expect]
+[ a ]
+key   =   1
+[|[b]|]
+[ c ]
+key   =   1

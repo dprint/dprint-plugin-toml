@@ -1,0 +1,14 @@
+~~ indentTables: never, indentEntries: never ~~
+== should remove the indentation of the touched items ==
+[a]
+  key   =   1
+  [|[a.b]
+    key   =   2|]
+    other   =   3
+
+[expect]
+[a]
+  key   =   1
+[|[a.b]
+key = 2|]
+    other   =   3

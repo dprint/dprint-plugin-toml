@@ -1,0 +1,13 @@
+~~ lineWidth: 20 ~~
+== should only break up the touched array ==
+a   =   ["aaaaaaaa", "bbbbbbbb"]
+[|b   =   ["aaaaaaaa", "bbbbbbbb"]|]
+c   =   ["aaaaaaaa", "bbbbbbbb"]
+
+[expect]
+a   =   ["aaaaaaaa", "bbbbbbbb"]
+[|b = [
+  "aaaaaaaa",
+  "bbbbbbbb",
+]|]
+c   =   ["aaaaaaaa", "bbbbbbbb"]

@@ -1,0 +1,103 @@
+== should indent a touched entry as the first entry of its table is ==
+[a]
+    key   =   1
+[|other   =   2|]
+
+[expect]
+[a]
+    key   =   1
+  [|other = 2|]
+
+== should not indent a touched entry when the first entry of its table isn't ==
+[a]
+key   =   1
+    [|other   =   2|]
+
+[expect]
+[a]
+key   =   1
+[|other = 2|]
+
+== should indent a touched comment as the entry beneath it is ==
+[a]
+key   =   1
+    [|#comment|]
+other   =   2
+
+[expect]
+[a]
+key   =   1
+[|# comment|]
+other   =   2
+
+== should keep the indentation of a touched first entry that is already as wide as formatted ==
+[a]
+  [|key   =   1|]
+  other   =   2
+
+[expect]
+[a]
+  [|key = 1|]
+  other   =   2
+
+== should only format a touched first entry that stays indented ==
+[a]
+    [|key   =   1|]
+    other   =   2
+[b]
+    key   =   1
+
+[expect]
+[a]
+  [|key = 1|]
+    other   =   2
+[b]
+    key   =   1
+
+== should format the table when the indentation of its touched first entry changes beneath an indented header ==
+[a]
+x   =   1
+    [a.b]
+        [|key   =   1|]
+        other   =   2
+
+[expect]
+[a]
+x   =   1
+  [|[a.b]
+    key = 1
+    other = 2|]
+
+== should format the table when the indentation of its touched header changes ==
+[a]
+x   =   1
+    [|[a.b]|]
+    key   =   1
+[c]
+    key   =   1
+
+[expect]
+[a]
+x   =   1
+  [|[a.b]
+  key = 1|]
+[c]
+    key   =   1
+
+== should format the table when the indentation of its touched first comment changes and it has no entries ==
+x   =   1
+  [a]
+    [|#comment|]
+    #other
+
+[b]
+    key   =   1
+
+[expect]
+x   =   1
+[|[a]
+  # comment
+  # other|]
+
+[b]
+    key   =   1

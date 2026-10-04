@@ -1,0 +1,28 @@
+~~ sortArrays: true ~~
+== should only sort the touched array ==
+a   =   ["b", "a"]
+[|b   =   ["b", "a"]|]
+c   =   ["b", "a"]
+
+[expect]
+a   =   ["b", "a"]
+[|b = ["a", "b"]|]
+c   =   ["b", "a"]
+
+== should sort all of a multi-line array a cursor is in ==
+a   =   ["b", "a"]
+b   =   [
+  "c",
+  "b",[||]
+  "a",
+]
+c   =   ["b", "a"]
+
+[expect]
+a   =   ["b", "a"]
+b = [
+  "a",
+  "b",[||]
+  "c",
+]
+c   =   ["b", "a"]

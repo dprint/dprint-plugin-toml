@@ -1,0 +1,32 @@
+~~ indentTables: always ~~
+== should format the table when indenting its touched first entry would indent its entries further ==
+[a]
+key   =   1
+[a.b]
+[|key   =   2|]
+other   =   3
+[c]
+key   =   1
+
+[expect]
+[a]
+key   =   1
+  [|[a.b]
+  key = 2
+  other = 3|]
+[c]
+key   =   1
+
+== should only format a touched entry that isn't the first of its table ==
+[a]
+key   =   1
+[a.b]
+key   =   2
+[|other   =   3|]
+
+[expect]
+[a]
+key   =   1
+[a.b]
+key   =   2
+  [|other = 3|]

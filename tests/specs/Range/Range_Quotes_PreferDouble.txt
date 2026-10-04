@@ -1,0 +1,14 @@
+~~ quoteStyle: preferDouble ~~
+== should only change the quotes of the touched entries ==
+a   =   'a'
+[|b   =   'b'
+c   =   ['c', { d = 'd' }]
+e   =   'C:\path'|]
+f   =   'f'
+
+[expect]
+a   =   'a'
+[|b = "b"
+c = ["c", { d = "d" }]
+e = 'C:\path'|]
+f   =   'f'
