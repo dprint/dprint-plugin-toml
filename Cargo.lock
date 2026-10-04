@@ -146,7 +146,7 @@ dependencies = [
 
 [[package]]
 name = "dprint-plugin-toml"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "dprint-core",
  "dprint-core-macros",
