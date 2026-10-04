@@ -1,5 +1,5 @@
 ~~ sortKeys: true ~~
-== should only format the touched entry when sorting doesn't move it ==
+== should only format the touched entry when sorting would not move it ==
 b   =   2
 a   =   1
 [|c   =   3|]
@@ -15,7 +15,7 @@ a   =   1
 [table]
 z   =   1
 
-== should format the table when sorting moves the touched entry ==
+== should not sort when sorting would move an entry that is not touched ==
 [first]
 z   =   1
 y   =   2
@@ -35,32 +35,18 @@ z   =   1
 y   =   2
 
 [ table ]
+c   =   3
 [|a = 1|]
-b = 2
-c = 3
+b   =   2
 
 [other]
 z   =   1
 y   =   2
 
-== should format the entries above the first table when sorting moves a touched one ==
-c   =   3
-[|a   =   1|]
-
+== should not sort when only some of the entries that would move are touched ==
 [table]
-z   =   1
-
-[expect]
-[|a = 1|]
-c = 3
-
-[table]
-z   =   1
-
-== should format the table when sorting moves a touched comment ==
-[table]
-b   =   2
-[|#comment|]
+[|c   =   3
+b   =   2|]
 a   =   1
 
 [other]
@@ -68,17 +54,147 @@ z   =   1
 
 [expect]
 [table]
-[|# comment|]
-a = 1
-b = 2
+[|c = 3
+b = 2|]
+a   =   1
 
 [other]
 z   =   1
 
-== should format each table the touched items are in when sorting moves one ==
+== should sort when all the entries of a table are touched ==
+[first]
+z   =   1
+y   =   2
+
+[ table ]
+[|c   =   3
+a   =   1
+b   =   2|]
+
+[other]
+z   =   1
+y   =   2
+
+[expect]
+[first]
+z   =   1
+y   =   2
+
+[ table ]
+[|a = 1
+b = 2
+c = 3|]
+
+[other]
+z   =   1
+y   =   2
+
+== should sort when all the entries that would move are touched ==
+[table]
+a   =   1
+[|c   =   3
+b   =   2|]
+d   =   4
+
+[other]
+z   =   1
+
+[expect]
+[table]
+a   =   1
+[|b = 2
+c = 3|]
+d   =   4
+
+[other]
+z   =   1
+
+== should sort when a cursor is in an entry and nothing would move ==
+[table]
+a   =   1
+b   =  [||] 2
+
+[other]
+z   =   1
+y   =   2
+
+[expect]
+[table]
+a   =   1
+b = [||]2
+
+[other]
+z   =   1
+y   =   2
+
+== should sort the touched entries above the first table ==
+[|c   =   3
+a   =   1|]
+
+[table]
+z   =   1
+y   =   2
+
+[expect]
+[|a = 1
+c = 3|]
+
+[table]
+z   =   1
+y   =   2
+
+== should not sort the entries above the first table when one is not touched ==
+c   =   3
+[|a   =   1|]
+
+[table]
+z   =   1
+
+[expect]
+c   =   3
+[|a = 1|]
+
+[table]
+z   =   1
+
+== should sort the touched tables and not the others ==
 [a]
 z   =   1
-y   =  [|2
+y   =   2
+
+[|[ b ]
+z   =   1
+y   =   2
+
+[ c ]
+z   =   1
+y   =   2|]
+
+[d]
+z   =   1
+y   =   2
+
+[expect]
+[a]
+z   =   1
+y   =   2
+
+[|[b]
+y = 2
+z = 1
+
+[c]
+y = 2
+z = 1|]
+
+[d]
+z   =   1
+y   =   2
+
+== should not sort either table when the range ends part way through one ==
+[a]
+[|z   =   1
+y   =   2
 
 [ b ]
 d   =   4|]
@@ -90,24 +206,52 @@ y   =   2
 
 [expect]
 [a]
-[|y = 2
-z = 1
+[|z = 1
+y = 2
 
 [b]
-c = 3
 d = 4|]
+c   =   3
 
 [c]
 z   =   1
 y   =   2
 
-== should format the whole file when sorting moves a touched entry of its only table ==
-c   =   3
-[|a   =   1|]
+== should not move a touched comment that sorting would move ==
+[table]
+b   =   2
+[|#comment|]
+a   =   1
+
+[other]
+z   =   1
 
 [expect]
+[table]
+b   =   2
+[|# comment|]
+a   =   1
+
+[other]
+z   =   1
+
+== should move a comment with the entry it is above when both and what they pass are touched ==
+[table]
+[|b   =   2
+#comment
+a   =   1|]
+
+[other]
+z   =   1
+
+[expect]
+[table]
+[|# comment
 a = 1
-c = 3
+b = 2|]
+
+[other]
+z   =   1
 
 == should only format a touched heading comment when the entries beneath it would move ==
 [table]
@@ -123,15 +267,15 @@ a   =   1
 b   =   2
 a   =   1
 
-== should keep a heading comment at the top when sorting moves a touched entry ==
+== should keep a heading comment at the top when sorting the touched entries beneath it ==
 [first]
 z   =   1
 
 [table]
 #heading
 
-[|b   =   2|]
-a   =   1
+[|b   =   2
+a   =   1|]
 
 [other]
 z   =   1
@@ -142,38 +286,46 @@ z   =   1
 
 [table]
 #heading
+
+[|a = 1
+b = 2|]
+
+[other]
+z   =   1
+
+== should keep a touched heading comment at the top when sorting the touched entries beneath it ==
+[first]
+z   =   1
+
+[table]
+[|#heading
+
+b   =   2
+a   =   1|]
+
+[other]
+z   =   1
+
+[expect]
+[first]
+z   =   1
+
+[table]
+[|# heading
 
 a = 1
-[|b = 2|]
+b = 2|]
 
 [other]
 z   =   1
 
-== should move a comment with the touched entry it is above ==
-[table]
-b   =   2
-#comment
-[|a   =   1|]
-
-[other]
-z   =   1
-
-[expect]
-[table]
-# comment
-[|a = 1|]
-b = 2
-
-[other]
-z   =   1
-
-== should only format the group of the table that sorting moves a touched entry of ==
+== should only sort the group of a table that is touched ==
 [table]
 z   =   1
 y   =   2
 
-d   =   4
-[|c   =   3|]
+[|d   =   4
+c   =   3|]
 
 b   =   2
 a   =   1
@@ -186,23 +338,51 @@ z   =   1
 z   =   1
 y   =   2
 
-[|c = 3|]
+[|c = 3
+d = 4|]
+
+b   =   2
+a   =   1
+
+[other]
+z   =   1
+
+== should sort each touched group of a table on its own ==
+[table]
+z   =   1
+y   =   2
+
+[|d   =   4
+c   =   3
+
+b   =   2
+a   =   1|]
+
+[other]
+z   =   1
+
+[expect]
+[table]
+z   =   1
+y   =   2
+
+[|c = 3
 d = 4
 
-b   =   2
-a   =   1
+a = 1
+b = 2|]
 
 [other]
 z   =   1
 
-== should only format the touched element of an array of tables ==
+== should only sort the touched element of an array of tables ==
 [[table]]
 b   =   1
 a   =   2
 
 [[table]]
-[|d   =   1|]
-c   =   2
+[|d   =   1
+c   =   2|]
 
 [[table]]
 f   =   1
@@ -214,14 +394,36 @@ b   =   1
 a   =   2
 
 [[table]]
-c = 2
-[|d = 1|]
+[|c = 2
+d = 1|]
 
 [[table]]
 f   =   1
 e   =   2
 
-== should format the entries sorting moves along with a touched table header ==
+== should sort the entries of a touched table along with its header ==
+[first]
+z   =   1
+
+[|[ table ]
+b   =   2
+a   =   1|]
+
+[other]
+z   =   1
+
+[expect]
+[first]
+z   =   1
+
+[|[table]
+a = 1
+b = 2|]
+
+[other]
+z   =   1
+
+== should not sort the entries of a touched table header when one is not touched ==
 [first]
 z   =   1
 
@@ -237,8 +439,8 @@ z   =   1
 z   =   1
 
 [|[table]
-a = 1
 b = 2|]
+a   =   1
 
 [other]
 z   =   1
@@ -261,14 +463,14 @@ a   =   1
 [other]
 z   =   1
 
-== should keep the blank line beneath the table header when sorting moves a touched entry ==
+== should keep the blank line beneath the table header when sorting the touched entries ==
 [first]
 z   =   1
 
 [table]
 
-[|b   =   2|]
-a   =   1
+[|b   =   2
+a   =   1|]
 
 [other]
 z   =   1
@@ -279,13 +481,13 @@ z   =   1
 
 [table]
 
-a = 1
-[|b = 2|]
+[|a = 1
+b = 2|]
 
 [other]
 z   =   1
 
-== should format the table when removing the blank line above a heading comment changes what it is above ==
+== should not sort when removing the blank line above a touched heading comment ==
 [first]
 z   =   1
 
@@ -304,8 +506,24 @@ z   =   1
 
 [|[table]
 # comment|]
-a = 2
-m = 1
+m   =   1
+a   =   2
 
 [other]
 z   =   1
+
+== should sort the whole file when touching its first and last entries ==
+c   =  [|3
+b   =   2
+
+[ table ]
+z   =   1
+y   =|]   2
+
+[expect]
+b = 2
+c = 3
+
+[table]
+y = 2
+z = 1

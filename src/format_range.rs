@@ -11,7 +11,6 @@ use crate::ast::Root;
 use crate::ast::RootItem;
 use crate::error::FormatError;
 use crate::format_text::format_text;
-use crate::format_text::format_text_inner;
 use crate::format_text::parse;
 use crate::format_text::print;
 use crate::format_text::process_node;
@@ -25,14 +24,16 @@ use crate::sorting::section_end;
 /// lines above and below them, the line endings and any byte order mark. An empty range is a
 /// cursor, which touches whatever is on its line.
 ///
-/// When sorting moves any of those (ex. the `Cargo.toml` conventions or the `sortKeys` option),
-/// the lines they are moved within are formatted instead. When formatting the rest of the file
-/// afterwards wouldn't then give what formatting all of it at once does (ex. a table header and
-/// the first entry beneath it decide between them whether the table's entries are indented, so
-/// changing the indentation of only one changes the answer), the tables they are in are formatted
-/// instead, and failing that the whole file. A range that touches both the first and last of the
-/// file's entries, table headers and comments formats the whole file and one that only touches
-/// blank lines formats nothing.
+/// Entries are only reordered (ex. by the `Cargo.toml` conventions or the `sortKeys` option) when
+/// all of the lines that would move are touched, and are otherwise formatted where they are. What's
+/// within the value of a touched entry is sorted either way.
+///
+/// When formatting the rest of the file afterwards wouldn't then give what formatting all of it at
+/// once does (ex. a table header and the first entry beneath it decide between them whether the
+/// table's entries are indented, so changing the indentation of only one changes the answer), the
+/// tables they are in are formatted instead, and failing that the whole file. A range that touches
+/// both the first and last of the file's entries, table headers and comments formats the whole
+/// file and one that only touches blank lines formats nothing.
 pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, config: &Configuration) -> Result<Option<String>, FormatError> {
   let body = strip_bom(text);
   let bom_len = text.len() - body.len();
@@ -48,39 +49,69 @@ pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, conf
   let Some(touched) = find_touched(body, &starts, &range) else {
     return Ok(None);
   };
+  // the blank lines at the start of the file and the newline at its end belong to no item, so
+  // they are only formatted along with all of it
+  if touched == (0..=starts.len() - 1) {
+    return format_text(file_path, text, config);
+  }
 
-  process_node(file_path, &mut root, config);
-  let formatted = print(&root, body, config);
-  let formatted_starts = item_starts(&parse(&formatted)?);
-  debug_assert_eq!(formatted_starts.len(), starts.len());
-  let moved = widen_to_moved(&root, &starts, touched);
-  let tables = widen_to_tables(&root, moved.clone());
-  let mut result = None;
-  for items in [moved, tables] {
-    // the blank lines at the start of the file and the newline at its end belong to no item, so
-    // they are only formatted along with all of it
-    if *items.start() == 0 && *items.end() == starts.len() - 1 {
-      break;
-    }
+  process_node(file_path, &mut root, config, true);
+  let reorders = item_starts(&root) != starts;
+  let tables = widen_to_tables(&root, touched.clone());
+  let mut attempts = Vec::with_capacity(3);
+  if holds_same_items(&root, &starts, &touched) {
+    attempts.push((true, touched.clone()));
+  }
+  if reorders {
+    // lines outside of the touched ones would move, so the entries are left in their order
+    attempts.push((false, touched));
+  }
+  attempts.push((!reorders, tables));
+
+  let reordered = Formatted::new(print(&root, body, config))?;
+  let mut kept = None;
+  for (reorder_entries, items) in attempts {
+    let formatted = if reorder_entries {
+      &reordered
+    } else if let Some(kept) = &kept {
+      kept
+    } else {
+      kept.insert(Formatted::new(format_body(file_path, body, config, false)?)?)
+    };
+    debug_assert_eq!(formatted.starts.len(), starts.len());
     let original = lines_range(body, item_range(body, &starts, items.clone()));
-    let replacement = lines_range(&formatted, item_range(&formatted, &formatted_starts, items));
+    let replacement = lines_range(&formatted.text, item_range(&formatted.text, &formatted.starts, items));
     let spliced = format!(
       "{}{}{}",
       &body[..original.start],
-      with_file_new_lines(&formatted[replacement], body),
+      with_file_new_lines(&formatted.text[replacement], body),
       &body[original.end..]
     );
-    if format_text_inner(file_path, &spliced, config)? == formatted {
-      result = Some(format!("{}{}", &text[..bom_len], spliced));
-      break;
+    if format_body(file_path, &spliced, config, reorder_entries)? == formatted.text {
+      let result = format!("{}{}", &text[..bom_len], spliced);
+      return Ok(if result == text { None } else { Some(result) });
     }
   }
-  let result = result.unwrap_or(formatted);
-  if result == text {
-    Ok(None)
-  } else {
-    Ok(Some(result))
+  format_text(file_path, text, config)
+}
+
+/// The file once formatted along with where each of its items starts.
+struct Formatted {
+  text: String,
+  starts: Vec<usize>,
+}
+
+impl Formatted {
+  fn new(text: String) -> Result<Self, FormatError> {
+    let starts = item_starts(&parse(&text)?);
+    Ok(Formatted { text, starts })
   }
+}
+
+fn format_body(file_path: &Path, body: &str, config: &Configuration, reorder_entries: bool) -> Result<String, FormatError> {
+  let mut root = parse(body)?;
+  process_node(file_path, &mut root, config, reorder_entries);
+  Ok(print(&root, body, config))
 }
 
 /// Where each of the root's items starts in the text it was parsed from.
@@ -107,21 +138,15 @@ fn find_touched(text: &str, starts: &[usize], range: &Range<usize>) -> Option<Ra
   Some(first..=last)
 }
 
-/// Widens the items until the same ones are within them once sorted, whatever order they end up
-/// in, since the formatted items can only be put back in place of the original ones when they're
-/// the same ones.
+/// Whether the same items are within `items` once sorted, whatever order they end up in, which
+/// means sorting them moves nothing outside of them.
 ///
 /// `root` is the file once sorted and `starts` is where each item started before it was.
-fn widen_to_moved(root: &Root, starts: &[usize], items: RangeInclusive<usize>) -> RangeInclusive<usize> {
-  let (mut first, mut last) = items.into_inner();
-  loop {
-    let original_indexes = (first..=last).map(|index| starts.binary_search(&root.items[index].start_in_source()).unwrap_or(index));
-    let (new_first, new_last) = original_indexes.fold((first, last), |(first, last), index| (first.min(index), last.max(index)));
-    if (new_first, new_last) == (first, last) {
-      return first..=last;
-    }
-    (first, last) = (new_first, new_last);
-  }
+fn holds_same_items(root: &Root, starts: &[usize], items: &RangeInclusive<usize>) -> bool {
+  items.clone().all(|index| {
+    let original_index = starts.binary_search(&root.items[index].start_in_source());
+    original_index.is_ok_and(|index| items.contains(&index))
+  })
 }
 
 /// Widens the items to all of the tables they are in, from the header of the first to the last

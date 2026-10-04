@@ -1,5 +1,5 @@
 -- Cargo.toml --
-== should only format the touched entry when the conventions don't move it ==
+== should only format the touched entry when the conventions would not move it ==
 [package]
 name   =   "a"
 [|version   =   "0.1.0"|]
@@ -19,7 +19,7 @@ edition   =   "2021"
 b   =   "1"
 a   =   "1"
 
-== should format the table when the conventions move the touched entry ==
+== should not sort the dependencies when one that would move is not touched ==
 [package]
 edition   =   "2021"
 name   =   "a"
@@ -38,24 +38,68 @@ edition   =   "2021"
 name   =   "a"
 
 [dependencies]
-a = "1"
 [|b = "1"|]
+a   =   "1"
 
 [dev-dependencies]
 d   =   "1"
 c   =   "1"
 
-== should sort the workspace members of a touched entry ==
+== should sort the dependencies when all of them are touched ==
+[package]
+edition   =   "2021"
+name   =   "a"
+
+[dependencies]
+[|b   =   "1"
+a   =   "1"|]
+
+[dev-dependencies]
+d   =   "1"
+c   =   "1"
+
+[expect]
+[package]
+edition   =   "2021"
+name   =   "a"
+
+[dependencies]
+[|a = "1"
+b = "1"|]
+
+[dev-dependencies]
+d   =   "1"
+c   =   "1"
+
+== should order the package when all of it is touched ==
 [workspace]
-resolver   =   "2"
-[|members   =   ["b", "a"]|]
+members   =   ["a"]
+
+[|[ package ]
+edition   =   "2021"
+description   =   "b"
+version   =   "0.1.0"
+name   =   "a"|]
+
+[dependencies]
+b   =   "1"
+a   =   "1"
 
 [expect]
 [workspace]
-resolver   =   "2"
-[|members = ["a", "b"]|]
+members   =   ["a"]
 
-== should format the entries the conventions move along with a touched table header ==
+[|[package]
+name = "a"
+version = "0.1.0"
+edition = "2021"
+description = "b"|]
+
+[dependencies]
+b   =   "1"
+a   =   "1"
+
+== should not order the package when an entry that would move is not touched ==
 [workspace]
 members   =   ["a"]
 
@@ -72,28 +116,122 @@ b   =   "1"
 members   =   ["a"]
 
 [|[package]
-name = "a"
 version = "0.1.0"|]
+name   =   "a"
 edition   =   "2021"
 
 [dependencies]
 b   =   "1"
+
+== should not move the description of a package to the end when what it would pass is not touched ==
+[package]
+name   =   "a"
+[|description   =   "b"|]
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+[|description = "b"|]
+edition   =   "2021"
+
+[dependencies]
+b   =   "1"
+
+== should move the description of a package to the end when what it passes is touched ==
+[package]
+name   =   "a"
+[|description   =   "b"
+edition   =   "2021"|]
+
+[dependencies]
+b   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+[|edition = "2021"
+description = "b"|]
+
+[dependencies]
+b   =   "1"
+
+== should move a comment with the dependency it is above when all of them are touched ==
+[package]
+name   =   "a"
+
+[dependencies]
+[|#comment
+b   =   "1"
+a   =   "1"|]
+
+[dev-dependencies]
+d   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+
+[dependencies]
+[|a = "1"
+# comment
+b = "1"|]
+
+[dev-dependencies]
+d   =   "1"
+
+== should not move a comment with the dependency it is above when it is not touched ==
+[package]
+name   =   "a"
+
+[dependencies]
+#comment
+b   =   "1"
+[|a   =   "1"|]
+
+[dev-dependencies]
+d   =   "1"
+
+[expect]
+[package]
+name   =   "a"
+
+[dependencies]
+#comment
+b   =   "1"
+[|a = "1"|]
+
+[dev-dependencies]
+d   =   "1"
 
 == should not sort an array of tables ==
 [package]
 name   =   "a"
 
 [[bin]]
-[|path   =   "a"|]
-name   =   "b"
+[|path   =   "a"
+name   =   "b"|]
 
 [expect]
 [package]
 name   =   "a"
 
 [[bin]]
-[|path = "a"|]
-name   =   "b"
+[|path = "a"
+name = "b"|]
+
+== should sort the workspace members of a touched entry ==
+[workspace]
+resolver   =   "2"
+[|members   =   ["b", "a"]|]
+
+[expect]
+[workspace]
+resolver   =   "2"
+[|members = ["a", "b"]|]
 
 == should sort the workspace members when a cursor is in them ==
 [workspace]
@@ -117,44 +255,20 @@ members = [
 [package]
 name   =   "a"
 
-== should move a comment with the dependency it is above ==
-[package]
+== should apply the conventions to the whole file when touching its first and last lines ==
+[ pack[|age ]
+version   =   "0.1.0"
 name   =   "a"
 
-[dependencies]
-#comment
+[ dependencies ]
 b   =   "1"
-[|a   =   "1"|]
-
-[dev-dependencies]
-d   =   "1"
+a   =|]   "1"
 
 [expect]
 [package]
-name   =   "a"
+name = "a"
+version = "0.1.0"
 
 [dependencies]
-[|a = "1"|]
-# comment
+a = "1"
 b = "1"
-
-[dev-dependencies]
-d   =   "1"
-
-== should move the description of a touched package to the end ==
-[package]
-name   =   "a"
-[|description   =   "b"|]
-edition   =   "2021"
-
-[dependencies]
-b   =   "1"
-
-[expect]
-[package]
-name   =   "a"
-edition = "2021"
-[|description = "b"|]
-
-[dependencies]
-b   =   "1"

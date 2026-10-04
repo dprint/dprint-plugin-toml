@@ -20,7 +20,7 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
   }
 }
 
-pub(crate) fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
+fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
   let text = strip_bom(text);
   let root = parse_and_process_node(file_path, text, config)?;
 
@@ -44,17 +44,20 @@ pub(crate) fn strip_bom(text: &str) -> &str {
 
 fn parse_and_process_node<'a>(file_path: &Path, text: &'a str, config: &Configuration) -> Result<Root<'a>, FormatError> {
   let mut root = parse(text)?;
-  process_node(file_path, &mut root, config);
+  process_node(file_path, &mut root, config, true);
   Ok(root)
 }
 
-pub(crate) fn process_node(file_path: &Path, root: &mut Root, config: &Configuration) {
-  crate::sorting::apply_sorting(root, config);
+/// Applies the sorting options and the `Cargo.toml` conventions. The entries of the file's tables
+/// are only reordered when `reorder_entries` is set, which formatting a range leaves off when that
+/// would move lines outside of the range. What's within a value is sorted either way.
+pub(crate) fn process_node(file_path: &Path, root: &mut Root, config: &Configuration, reorder_entries: bool) {
+  crate::sorting::apply_sorting(root, config, reorder_entries);
 
   // after the general sorting, so that a Cargo.toml keeps its conventional order rather than an
   // alphabetical one
   if config.cargo_apply_conventions && cargo::is_cargo_toml_file(file_path) {
-    cargo::apply_cargo_toml_conventions(root);
+    cargo::apply_cargo_toml_conventions(root, reorder_entries);
   }
 }
 
