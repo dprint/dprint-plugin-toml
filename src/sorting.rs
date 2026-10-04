@@ -10,8 +10,8 @@ use crate::ast::*;
 use crate::configuration::Configuration;
 
 /// Applies whichever of the sorting options are turned on.
-pub fn apply_sorting(root: &mut Root, config: &Configuration) {
-  if config.sort_keys {
+pub fn apply_sorting(root: &mut Root, config: &Configuration, reorder_entries: bool) {
+  if config.sort_keys && reorder_entries {
     sort_root_keys(root);
   }
   if config.sort_arrays || config.sort_inline_tables {

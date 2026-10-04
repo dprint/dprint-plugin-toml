@@ -1,0 +1,12 @@
+~~ comment.forceLeadingSpace: false ~~
+== should keep the touched comments as they are ==
+a   =   1   #a
+[|b   =   2   #b
+#c|]
+d   =   4   #d
+
+[expect]
+a   =   1   #a
+[|b = 2 #b
+#c|]
+d   =   4   #d

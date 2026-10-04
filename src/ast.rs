@@ -22,6 +22,9 @@ pub struct Comment<'a> {
   /// `maintain` indent settings go by. Zero for a comment that isn't on a line of its own at the
   /// top level, which is never indented independently.
   pub indent_in_source: usize,
+  /// Where the comment starts in the source, which is what tells formatting a range which lines
+  /// it is on, including once sorting has moved it. Only read at the top level.
+  pub start_in_source: usize,
 }
 
 /// A parsed TOML document.
@@ -51,6 +54,14 @@ impl RootItem<'_> {
   pub fn is_table_header(&self) -> bool {
     matches!(self, RootItem::TableHeader(_))
   }
+
+  pub fn start_in_source(&self) -> usize {
+    match self {
+      RootItem::Comment(c) => c.start_in_source,
+      RootItem::Entry(e) => e.start_in_source,
+      RootItem::TableHeader(h) => h.start_in_source,
+    }
+  }
 }
 
 /// A table header, either `[key]` or `[[key]]`.
@@ -64,6 +75,9 @@ pub struct TableHeader<'a> {
   /// How many whitespace characters preceded the header on its line, which is what the
   /// `maintain` indent settings go by.
   pub indent_in_source: usize,
+  /// Where the header starts in the source, which is what tells formatting a range which lines
+  /// it is on, including once sorting has moved it.
+  pub start_in_source: usize,
 }
 
 /// A key/value pair.
@@ -80,6 +94,9 @@ pub struct Entry<'a> {
   /// indent settings go by. Always zero for an entry inside an inline table, which is never
   /// indented on its own.
   pub indent_in_source: usize,
+  /// Where the entry starts in the source, which is what tells formatting a range which lines
+  /// it is on, including once sorting has moved it. Only read at the top level.
+  pub start_in_source: usize,
 }
 
 /// A key, which may be dotted (`a.b.c`).

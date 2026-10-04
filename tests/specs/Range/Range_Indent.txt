@@ -1,0 +1,26 @@
+~~ indentTables: always, indentEntries: always ~~
+== should indent the touched entry as formatting the whole file would ==
+[a]
+key   =   1
+[a.b]
+[|key   =   2|]
+other   =   3
+
+[expect]
+[a]
+key   =   1
+[a.b]
+    [|key = 2|]
+other   =   3
+
+== should indent the touched table header as formatting the whole file would ==
+[a]
+key   =   1
+[|[a.b]|]
+key   =   2
+
+[expect]
+[a]
+key   =   1
+  [|[a.b]|]
+key   =   2

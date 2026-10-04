@@ -1,0 +1,10 @@
+~~ sortInlineTables: true ~~
+== should only sort the touched inline table ==
+a   =   { b = 1, a = 2 }
+[|b   =   { b = 1, a = 2 }|]
+c   =   { b = 1, a = 2 }
+
+[expect]
+a   =   { b = 1, a = 2 }
+[|b = { a = 2, b = 1 }|]
+c   =   { b = 1, a = 2 }

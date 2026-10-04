@@ -1,0 +1,10 @@
+~~ spaceSurroundingEquals: false ~~
+== should only remove the spaces of the touched entry ==
+a   =   1
+[|b   =   { c   =   2 }|]
+d   =   3
+
+[expect]
+a   =   1
+[|b={ c=2 }|]
+d   =   3

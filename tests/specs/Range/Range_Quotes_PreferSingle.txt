@@ -1,0 +1,14 @@
+~~ quoteStyle: preferSingle ~~
+== should only change the quotes of the touched entries ==
+a   =   "a"
+[|b   =   "b"
+c   =   ["c", { d = "d" }]
+e   =   "it's"|]
+f   =   "f"
+
+[expect]
+a   =   "a"
+[|b = 'b'
+c = ['c', { d = 'd' }]
+e = "it's"|]
+f   =   "f"

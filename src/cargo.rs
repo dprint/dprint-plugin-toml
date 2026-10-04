@@ -41,7 +41,7 @@ fn section_of(header: &TableHeader) -> Section {
   }
 }
 
-pub fn apply_cargo_toml_conventions(root: &mut Root) {
+pub fn apply_cargo_toml_conventions(root: &mut Root, reorder_entries: bool) {
   let mut index = 0;
   let mut last_header = Section::Other;
 
@@ -51,6 +51,7 @@ pub fn apply_cargo_toml_conventions(root: &mut Root) {
         let section = section_of(header);
         let end = section_end(&root.items, index + 1);
         match section {
+          _ if !reorder_entries => {}
           Section::Package => sort_root_entries(&mut root.items, index + 1, end, &sort_cargo_package_section),
           Section::Dependencies => sort_root_entries(&mut root.items, index + 1, end, &|left, right| entry_sort_key(left).cmp(entry_sort_key(right))),
           Section::Workspace | Section::Other => {}

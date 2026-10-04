@@ -133,6 +133,7 @@ impl<'a> Parser<'a> {
       text: self.text[start..self.pos].trim_end_matches([' ', '\t']),
       blank_line_before,
       indent_in_source,
+      start_in_source: start,
     }
   }
 
@@ -194,6 +195,7 @@ impl<'a> Parser<'a> {
   }
 
   fn parse_table_header(&mut self, blank_line_before: bool, indent_in_source: usize) -> Result<TableHeader<'a>, SyntaxError> {
+    let start = self.pos;
     self.bump(); // '['
     let is_array_of_tables = self.peek() == Some('[');
     if is_array_of_tables {
@@ -216,10 +218,12 @@ impl<'a> Parser<'a> {
       blank_line_before,
       trailing_comment: self.parse_trailing_comment(),
       indent_in_source,
+      start_in_source: start,
     })
   }
 
   fn parse_entry(&mut self, blank_line_before: bool, leading_comments: Vec<Comment<'a>>, indent_in_source: usize) -> Result<Entry<'a>, SyntaxError> {
+    let start = self.pos;
     let key = self.parse_key()?;
     self.skip_spaces();
     if self.peek() != Some('=') {
@@ -236,6 +240,7 @@ impl<'a> Parser<'a> {
       trailing_comment: None, // filled in by the caller, which knows where the line ends
       leading_comments,
       indent_in_source,
+      start_in_source: start,
     })
   }
 

@@ -1,0 +1,89 @@
+== should format an entry with a bare key ==
+a   =   1
+[|bare-key_1   =   2|]
+c   =   3
+
+[expect]
+a   =   1
+[|bare-key_1 = 2|]
+c   =   3
+
+== should format an entry with a numeric key ==
+a   =   1
+[|1234   =   2|]
+c   =   3
+
+[expect]
+a   =   1
+[|1234 = 2|]
+c   =   3
+
+== should format an entry with a quoted key ==
+a   =   1
+[|"quoted   =   key # not a comment"   =   2|]
+c   =   3
+
+[expect]
+a   =   1
+[|"quoted   =   key # not a comment" = 2|]
+c   =   3
+
+== should format an entry with a literal quoted key ==
+a   =   1
+[|'quoted   =   key # not a comment'   =   2|]
+c   =   3
+
+[expect]
+a   =   1
+[|'quoted   =   key # not a comment' = 2|]
+c   =   3
+
+== should format an entry with an empty quoted key ==
+a   =   1
+[|""   =   2|]
+c   =   3
+
+[expect]
+a   =   1
+[|"" = 2|]
+c   =   3
+
+== should format an entry with a dotted key ==
+a . b   =   1
+[|a  .  "b c"  .  'd'   =   2|]
+c . d   =   3
+
+[expect]
+a . b   =   1
+[|a."b c".'d' = 2|]
+c . d   =   3
+
+== should format the entry when only touching its key ==
+a   =   1
+[|key|]   =   2
+c   =   3
+
+[expect]
+a   =   1
+[|key|] = 2
+c   =   3
+
+== should format the entry when only touching its equals sign ==
+a   =   1
+key   [|=|]   2
+c   =   3
+
+[expect]
+a   =   1
+key [|=|] 2
+c   =   3
+
+== should format the entry when only touching its value ==
+a   =   1
+key   =   [|2|]
+c   =   3
+
+[expect]
+a   =   1
+key = [|2|]
+c   =   3

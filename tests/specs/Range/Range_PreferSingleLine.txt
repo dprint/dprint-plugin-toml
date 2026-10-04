@@ -1,0 +1,38 @@
+~~ array.preferSingleLine: true, inlineTable.preferSingleLine: true ~~
+== should only collapse the touched array and inline table ==
+a   =   [
+  1,
+]
+[|b   =   [
+  1,
+  2,
+]
+c   =   {
+  d = 1,
+}|]
+e   =   [
+  1,
+]
+
+[expect]
+a   =   [
+  1,
+]
+[|b = [1, 2]
+c = { d = 1 }|]
+e   =   [
+  1,
+]
+
+== should collapse an array a cursor is in ==
+a   =   1
+b   =   [
+  1,
+  [||]2,
+]
+c   =   3
+
+[expect]
+a   =   1
+b = [1, 2][||]
+c   =   3
