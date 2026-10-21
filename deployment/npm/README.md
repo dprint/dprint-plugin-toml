@@ -14,5 +14,8 @@ import * as fs from "fs";
 const buffer = fs.readFileSync(getPath());
 const formatter = createFromBuffer(buffer);
 
-console.log(formatter.formatText("test.toml", "key   =   5"));
+console.log(formatter.formatText({
+  filePath: "test.toml",
+  fileText: "key   =   5",
+}));
 ```
