@@ -8,11 +8,23 @@ use crate::error::ParseError;
 use crate::parser;
 
 use dprint_core::configuration::resolve_new_line_kind;
+use dprint_core::formatting::Arena;
+use dprint_core::formatting::ArenaPool;
 use dprint_core::formatting::PrintOptions;
 use std::path::Path;
 
 pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Result<Option<String>, FormatError> {
-  let result = format_text_inner(file_path, text, config)?;
+  format_text_with_arena_pool(file_path, text, config, None)
+}
+
+/// Formats a file, creating the arena for formatting from the pool when given one.
+pub(crate) fn format_text_with_arena_pool(
+  file_path: &Path,
+  text: &str,
+  config: &Configuration,
+  arena_pool: Option<&ArenaPool>,
+) -> Result<Option<String>, FormatError> {
+  let result = format_text_inner(file_path, text, config, arena_pool)?;
   if result == text {
     Ok(None)
   } else {
@@ -20,22 +32,25 @@ pub fn format_text(file_path: &Path, text: &str, config: &Configuration) -> Resu
   }
 }
 
-fn format_text_inner(file_path: &Path, text: &str, config: &Configuration) -> Result<String, FormatError> {
+fn format_text_inner(file_path: &Path, text: &str, config: &Configuration, arena_pool: Option<&ArenaPool>) -> Result<String, FormatError> {
   let text = strip_bom(text);
   let root = parse_and_process_node(file_path, text, config)?;
 
-  Ok(print(&root, text, config))
+  Ok(print(&root, text, config, arena_pool))
 }
 
-pub(crate) fn print(root: &Root, text: &str, config: &Configuration) -> String {
-  dprint_core::formatting::format(|| generate(root, config), config_to_print_options(text, config))
+pub(crate) fn print(root: &Root, text: &str, config: &Configuration, arena_pool: Option<&ArenaPool>) -> String {
+  // the arena is created after the parsed file so the print items can borrow from it
+  let arena = create_arena(arena_pool);
+  let print_items = generate(&arena, root, config);
+  dprint_core::formatting::print(print_items, config_to_print_options(text, config))
 }
 
 #[cfg(feature = "tracing")]
 pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprint_core::formatting::TracingResult {
   let root = parse_and_process_node(file_path, text, config).unwrap();
-
-  dprint_core::formatting::trace_printing(|| generate(&root, config), config_to_print_options(text, config))
+  let arena = Arena::new();
+  dprint_core::formatting::trace_printing(generate(&arena, &root, config), config_to_print_options(text, config))
 }
 
 pub(crate) fn strip_bom(text: &str) -> &str {
@@ -91,6 +106,13 @@ fn highlight_range(err: &parser::SyntaxError, text: &str) -> (usize, usize) {
       Some(c) => (start, start + c.len_utf8()),
       None => (text[..start].chars().next_back().map(|c| start - c.len_utf8()).unwrap_or(start), start),
     }
+  }
+}
+
+fn create_arena(arena_pool: Option<&ArenaPool>) -> Arena {
+  match arena_pool {
+    Some(arena_pool) => arena_pool.create_arena(),
+    None => Arena::new(),
   }
 }
 
