@@ -8,7 +8,10 @@
 // parser's job for a value is to find where it ends. That keeps number, date-time and string
 // handling to a scan rather than a full decode.
 
+use dprint_core::formatting::bumpalo::Bump;
+
 use crate::ast::*;
+use crate::generation::BumpVec;
 
 /// A byte-index range into the text being parsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,10 +33,11 @@ pub struct SyntaxError {
   pub span: Span,
 }
 
-/// Parses TOML text into a [`Root`].
-pub fn parse(text: &str) -> Result<Root<'_>, SyntaxError> {
-  let mut parser = Parser { text, pos: 0, depth: 0 };
-  parser.parse_root()
+/// Parses TOML text into a [`Root`] allocated in the arena.
+pub fn parse<'a>(arena: &'a Bump, text: &'a str) -> Result<&'a mut Root<'a>, SyntaxError> {
+  let mut parser = Parser { arena, text, pos: 0, depth: 0 };
+  let root = parser.parse_root()?;
+  Ok(arena.alloc(root))
 }
 
 /// Characters that end a bare value or key token.
@@ -54,6 +58,8 @@ fn is_bare_key_char(c: char) -> bool {
 const MAX_NESTING_DEPTH: usize = 128;
 
 struct Parser<'a> {
+  /// The arena the tree is allocated in.
+  arena: &'a Bump,
   text: &'a str,
   pos: usize,
   /// How many arrays and inline tables enclose the value being parsed.
@@ -150,7 +156,7 @@ impl<'a> Parser<'a> {
   // ---- root ----
 
   fn parse_root(&mut self) -> Result<Root<'a>, SyntaxError> {
-    let mut items = Vec::new();
+    let mut items = BumpVec::new_in(self.arena);
     let mut newlines = 0usize;
     loop {
       // the whitespace skipped here is what precedes the item on its own line, since every path
@@ -180,7 +186,7 @@ impl<'a> Parser<'a> {
         }
         Some('[') => items.push(RootItem::TableHeader(self.parse_table_header(blank_line_before, indent_in_source)?)),
         _ => {
-          let mut entry = self.parse_entry(blank_line_before, Vec::new(), indent_in_source)?;
+          let mut entry = self.parse_entry(blank_line_before, BumpVec::new_in(self.arena), indent_in_source)?;
           entry.trailing_comment = self.parse_trailing_comment();
           items.push(RootItem::Entry(entry));
         }
@@ -222,7 +228,7 @@ impl<'a> Parser<'a> {
     })
   }
 
-  fn parse_entry(&mut self, blank_line_before: bool, leading_comments: Vec<Comment<'a>>, indent_in_source: usize) -> Result<Entry<'a>, SyntaxError> {
+  fn parse_entry(&mut self, blank_line_before: bool, leading_comments: BumpVec<'a, Comment<'a>>, indent_in_source: usize) -> Result<Entry<'a>, SyntaxError> {
     let start = self.pos;
     let key = self.parse_key()?;
     self.skip_spaces();
@@ -250,7 +256,7 @@ impl<'a> Parser<'a> {
     self.skip_spaces();
     let first = self.parse_key_part()?;
     // a dotted key is the exception, so `rest` stays empty and unallocated for most keys
-    let mut rest = Vec::new();
+    let mut rest = BumpVec::new_in(self.arena);
     loop {
       self.skip_spaces();
       if self.peek() != Some('.') {
@@ -260,7 +266,10 @@ impl<'a> Parser<'a> {
       self.skip_spaces();
       rest.push(self.parse_key_part()?);
     }
-    Ok(Key { first, rest })
+    Ok(Key {
+      first,
+      rest: rest.into_bump_slice(),
+    })
   }
 
   fn parse_key_part(&mut self) -> Result<KeyPart<'a>, SyntaxError> {
@@ -479,8 +488,8 @@ impl<'a> Parser<'a> {
     let comment_after_open = self.parse_trailing_comment();
     let multi_line_in_source = comment_after_open.is_some() || matches!(self.peek(), Some('\n') | Some('\r'));
 
-    let mut values: Vec<ArrayValue<'a>> = Vec::new();
-    let mut pending_comments: Vec<Comment<'a>> = Vec::new();
+    let mut values: BumpVec<'a, ArrayValue<'a>> = BumpVec::new_in(self.arena);
+    let mut pending_comments: BumpVec<'a, Comment<'a>> = BumpVec::new_in(self.arena);
     let mut newlines = 0usize;
     let mut separated = true;
 
@@ -546,7 +555,7 @@ impl<'a> Parser<'a> {
 
       values.push(ArrayValue {
         value,
-        leading_comments: std::mem::take(&mut pending_comments),
+        leading_comments: std::mem::replace(&mut pending_comments, BumpVec::new_in(self.arena)),
         trailing_comment,
         blank_line_before,
       });
@@ -555,7 +564,7 @@ impl<'a> Parser<'a> {
     Ok(Array {
       values,
       comment_after_open,
-      comments_before_close: pending_comments,
+      comments_before_close: pending_comments.into_bump_slice(),
       multi_line_in_source,
     })
   }
@@ -571,8 +580,8 @@ impl<'a> Parser<'a> {
     let comment_after_open = self.parse_trailing_comment();
     let multi_line_in_source = comment_after_open.is_some() || matches!(self.peek(), Some('\n') | Some('\r'));
 
-    let mut entries: Vec<Entry<'a>> = Vec::new();
-    let mut pending_comments: Vec<Comment<'a>> = Vec::new();
+    let mut entries: BumpVec<'a, Entry<'a>> = BumpVec::new_in(self.arena);
+    let mut pending_comments: BumpVec<'a, Comment<'a>> = BumpVec::new_in(self.arena);
     let mut newlines = 0usize;
     let mut separated = true;
 
@@ -623,7 +632,7 @@ impl<'a> Parser<'a> {
       newlines = 0;
       // an entry within an inline table is never indented on its own, so its source indent is of
       // no interest
-      let mut entry = self.parse_entry(blank_line_before, std::mem::take(&mut pending_comments), 0)?;
+      let mut entry = self.parse_entry(blank_line_before, std::mem::replace(&mut pending_comments, BumpVec::new_in(self.arena)), 0)?;
 
       let mut trailing_comment = self.parse_trailing_comment();
       self.skip_spaces();
@@ -641,7 +650,7 @@ impl<'a> Parser<'a> {
     Ok(InlineTable {
       entries,
       comment_after_open,
-      comments_before_close: pending_comments,
+      comments_before_close: pending_comments.into_bump_slice(),
       multi_line_in_source,
     })
   }

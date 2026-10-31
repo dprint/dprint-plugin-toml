@@ -11,6 +11,7 @@ use super::configuration::Configuration;
 use crate::ast::Root;
 use crate::ast::RootItem;
 use crate::error::FormatError;
+use crate::format_text::create_arena;
 use crate::format_text::format_text_with_arena_pool;
 use crate::format_text::parse;
 use crate::format_text::print;
@@ -57,8 +58,9 @@ pub(crate) fn format_text_range_with_arena_pool(
     return format_text_with_arena_pool(file_path, text, config, arena_pool);
   }
 
-  let mut root = parse(body)?;
-  let starts = item_starts(&root);
+  let arena = create_arena(arena_pool);
+  let root = parse(&arena, body)?;
+  let starts = item_starts(root);
   let Some(touched) = find_touched(body, &starts, &range) else {
     return Ok(None);
   };
@@ -68,11 +70,11 @@ pub(crate) fn format_text_range_with_arena_pool(
     return format_text_with_arena_pool(file_path, text, config, arena_pool);
   }
 
-  process_node(file_path, &mut root, config, true);
-  let reorders = item_starts(&root) != starts;
-  let tables = widen_to_tables(&root, touched.clone());
+  process_node(file_path, root, config, true);
+  let reorders = item_starts(root) != starts;
+  let tables = widen_to_tables(root, touched.clone());
   let mut attempts = Vec::with_capacity(3);
-  if holds_same_items(&root, &starts, &touched) {
+  if holds_same_items(root, &starts, &touched) {
     attempts.push((true, touched.clone()));
   }
   if reorders {
@@ -81,7 +83,7 @@ pub(crate) fn format_text_range_with_arena_pool(
   }
   attempts.push((!reorders, tables));
 
-  let reordered = Formatted::new(print(&root, body, config, arena_pool))?;
+  let reordered = Formatted::new(print(&arena, root, body, config), arena_pool)?;
   let mut kept = None;
   for (reorder_entries, items) in attempts {
     let formatted = if reorder_entries {
@@ -89,7 +91,7 @@ pub(crate) fn format_text_range_with_arena_pool(
     } else if let Some(kept) = &kept {
       kept
     } else {
-      kept.insert(Formatted::new(format_body(file_path, body, config, false, arena_pool)?)?)
+      kept.insert(Formatted::new(format_body(file_path, body, config, false, arena_pool)?, arena_pool)?)
     };
     debug_assert_eq!(formatted.starts.len(), starts.len());
     let original = lines_range(body, item_range(body, &starts, items.clone()));
@@ -115,16 +117,18 @@ struct Formatted {
 }
 
 impl Formatted {
-  fn new(text: String) -> Result<Self, FormatError> {
-    let starts = item_starts(&parse(&text)?);
+  fn new(text: String, arena_pool: Option<&ArenaPool>) -> Result<Self, FormatError> {
+    let arena = create_arena(arena_pool);
+    let starts = item_starts(parse(&arena, &text)?);
     Ok(Formatted { text, starts })
   }
 }
 
 fn format_body(file_path: &Path, body: &str, config: &Configuration, reorder_entries: bool, arena_pool: Option<&ArenaPool>) -> Result<String, FormatError> {
-  let mut root = parse(body)?;
-  process_node(file_path, &mut root, config, reorder_entries);
-  Ok(print(&root, body, config, arena_pool))
+  let arena = create_arena(arena_pool);
+  let root = parse(&arena, body)?;
+  process_node(file_path, root, config, reorder_entries);
+  Ok(print(&arena, root, body, config))
 }
 
 /// Where each of the root's items starts in the text it was parsed from.

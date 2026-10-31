@@ -8,8 +8,18 @@
 // which outlives the tree, so none of it is copied. Nothing rewrites a node's text -- the Cargo
 // conventions reorder nodes and adjust their blank-line flags, but the text itself is only ever
 // read -- so a plain `&str` is enough and a `Cow` would only make each node larger.
+//
+// The tree itself is allocated in the same arena as the print items, so building it costs no heap
+// allocations. The arena never runs destructors, so nothing in the tree may own heap memory: the
+// lists the sorting rearranges are vectors in the arena and the rest are slices of it.
 
 use crate::configuration::Configuration;
+use crate::generation::BumpVec;
+
+// the arena never drops these, so they mustn't own anything that would need to be freed
+const _: () = assert!(!std::mem::needs_drop::<Comment<'static>>());
+const _: () = assert!(!std::mem::needs_drop::<Key<'static>>());
+const _: () = assert!(!std::mem::needs_drop::<TableHeader<'static>>());
 
 /// A comment, from the `#` up to (but not including) the end of the line.
 #[derive(Debug, Clone)]
@@ -30,7 +40,7 @@ pub struct Comment<'a> {
 /// A parsed TOML document.
 #[derive(Debug, Clone)]
 pub struct Root<'a> {
-  pub items: Vec<RootItem<'a>>,
+  pub items: BumpVec<'a, RootItem<'a>>,
 }
 
 /// A top level item. Comments on their own line are items in their own right rather than trivia
@@ -89,7 +99,7 @@ pub struct Entry<'a> {
   pub trailing_comment: Option<Comment<'a>>,
   /// Comments on the lines immediately above this entry. Only populated for entries inside an
   /// inline table; at the top level such comments are separate [`RootItem::Comment`]s.
-  pub leading_comments: Vec<Comment<'a>>,
+  pub leading_comments: BumpVec<'a, Comment<'a>>,
   /// How many whitespace characters preceded the entry on its line, which is what the `maintain`
   /// indent settings go by. Always zero for an entry inside an inline table, which is never
   /// indented on its own.
@@ -102,11 +112,11 @@ pub struct Entry<'a> {
 /// A key, which may be dotted (`a.b.c`).
 ///
 /// The first segment is held inline because a dotted key is the exception: keeping the rest in a
-/// `Vec` means the overwhelmingly common single segment key allocates nothing at all.
+/// slice means the overwhelmingly common single segment key allocates nothing at all.
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
   pub first: KeyPart<'a>,
-  pub rest: Vec<KeyPart<'a>>,
+  pub rest: &'a [KeyPart<'a>],
 }
 
 impl<'a> Key<'a> {
@@ -265,11 +275,11 @@ pub enum ValueKind<'a> {
 /// An array (`[1, 2, 3]`).
 #[derive(Debug, Clone)]
 pub struct Array<'a> {
-  pub values: Vec<ArrayValue<'a>>,
+  pub values: BumpVec<'a, ArrayValue<'a>>,
   /// A comment on the same line as the opening bracket (`[ # here`).
   pub comment_after_open: Option<Comment<'a>>,
   /// Comments on their own lines between the last value and the closing bracket.
-  pub comments_before_close: Vec<Comment<'a>>,
+  pub comments_before_close: &'a [Comment<'a>],
   /// Whether the opening bracket is followed by a newline or a comment, meaning the author wrote
   /// the array over multiple lines.
   pub multi_line_in_source: bool,
@@ -310,7 +320,7 @@ impl Array<'_> {
 pub struct ArrayValue<'a> {
   pub value: Value<'a>,
   /// Comments on the lines immediately above the value.
-  pub leading_comments: Vec<Comment<'a>>,
+  pub leading_comments: BumpVec<'a, Comment<'a>>,
   /// A comment on the same line as the value, before or after its comma.
   pub trailing_comment: Option<Comment<'a>>,
   pub blank_line_before: bool,
@@ -319,11 +329,11 @@ pub struct ArrayValue<'a> {
 /// An inline table (`{ a = 1, b = 2 }`).
 #[derive(Debug, Clone)]
 pub struct InlineTable<'a> {
-  pub entries: Vec<Entry<'a>>,
+  pub entries: BumpVec<'a, Entry<'a>>,
   /// A comment on the same line as the opening brace.
   pub comment_after_open: Option<Comment<'a>>,
   /// Comments on their own lines between the last entry and the closing brace.
-  pub comments_before_close: Vec<Comment<'a>>,
+  pub comments_before_close: &'a [Comment<'a>],
   /// Whether the author wrote the table over multiple lines, which TOML 1.1 permits.
   pub multi_line_in_source: bool,
 }

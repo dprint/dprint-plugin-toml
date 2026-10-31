@@ -34,32 +34,33 @@ pub(crate) fn format_text_with_arena_pool(
 
 fn format_text_inner(file_path: &Path, text: &str, config: &Configuration, arena_pool: Option<&ArenaPool>) -> Result<String, FormatError> {
   let text = strip_bom(text);
-  let root = parse_and_process_node(file_path, text, config)?;
+  // the parsed file is allocated in the same arena as the print items
+  let arena = create_arena(arena_pool);
+  let root = parse_and_process_node(&arena, file_path, text, config)?;
 
-  Ok(print(&root, text, config, arena_pool))
+  Ok(print(&arena, root, text, config))
 }
 
-pub(crate) fn print(root: &Root, text: &str, config: &Configuration, arena_pool: Option<&ArenaPool>) -> String {
-  // the arena is created after the parsed file so the print items can borrow from it
-  let arena = create_arena(arena_pool);
-  let print_items = generate(&arena, root, config);
+/// Prints the parsed file, generating its print items in the arena it was parsed into.
+pub(crate) fn print<'a>(arena: &'a Arena, root: &'a Root<'a>, text: &str, config: &'a Configuration) -> String {
+  let print_items = generate(arena, root, config);
   dprint_core::formatting::print(print_items, config_to_print_options(text, config))
 }
 
 #[cfg(feature = "tracing")]
 pub fn trace_file(file_path: &Path, text: &str, config: &Configuration) -> dprint_core::formatting::TracingResult {
-  let root = parse_and_process_node(file_path, text, config).unwrap();
   let arena = Arena::new();
-  dprint_core::formatting::trace_printing(generate(&arena, &root, config), config_to_print_options(text, config))
+  let root = parse_and_process_node(&arena, file_path, text, config).unwrap();
+  dprint_core::formatting::trace_printing(generate(&arena, root, config), config_to_print_options(text, config))
 }
 
 pub(crate) fn strip_bom(text: &str) -> &str {
   text.strip_prefix("\u{FEFF}").unwrap_or(text)
 }
 
-fn parse_and_process_node<'a>(file_path: &Path, text: &'a str, config: &Configuration) -> Result<Root<'a>, FormatError> {
-  let mut root = parse(text)?;
-  process_node(file_path, &mut root, config, true);
+fn parse_and_process_node<'a>(arena: &'a Arena, file_path: &Path, text: &'a str, config: &Configuration) -> Result<&'a mut Root<'a>, FormatError> {
+  let root = parse(arena, text)?;
+  process_node(file_path, root, config, true);
   Ok(root)
 }
 
@@ -76,8 +77,9 @@ pub(crate) fn process_node(file_path: &Path, root: &mut Root, config: &Configura
   }
 }
 
-pub(crate) fn parse(text: &str) -> Result<Root<'_>, ParseError> {
-  parser::parse(text).map_err(|err| {
+/// Parses the text into the arena.
+pub(crate) fn parse<'a>(arena: &'a Arena, text: &'a str) -> Result<&'a mut Root<'a>, ParseError> {
+  parser::parse(arena.bump(), text).map_err(|err| {
     let (start, end) = highlight_range(&err, text);
     ParseError::new(dprint_core::formatting::utils::string_utils::format_diagnostic(
       Some((start, end)),
@@ -109,7 +111,8 @@ fn highlight_range(err: &parser::SyntaxError, text: &str) -> (usize, usize) {
   }
 }
 
-fn create_arena(arena_pool: Option<&ArenaPool>) -> Arena {
+/// Creates the arena from the pool when given one.
+pub(crate) fn create_arena(arena_pool: Option<&ArenaPool>) -> Arena {
   match arena_pool {
     Some(arena_pool) => arena_pool.create_arena(),
     None => Arena::new(),

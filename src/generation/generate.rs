@@ -244,7 +244,7 @@ fn gen_array<'a>(array: &'a Array<'a>, context: &mut Context<'a>) -> PrintItems<
         open: sc!("["),
         close: sc!("]"),
         comment_after_open: array.comment_after_open.as_ref(),
-        comments_before_close: &array.comments_before_close,
+        comments_before_close: array.comments_before_close,
       },
       |context| {
         let mut items = PrintItems::new(context.arena);
@@ -295,7 +295,7 @@ fn gen_array<'a>(array: &'a Array<'a>, context: &mut Context<'a>) -> PrintItems<
       open: sc!("["),
       close: sc!("]"),
       comment_after_open: array.comment_after_open.as_ref(),
-      comments_before_close: &array.comments_before_close,
+      comments_before_close: array.comments_before_close,
     },
     |context| {
       if array.values.is_empty() {
@@ -363,7 +363,7 @@ fn gen_multi_line_inline_table<'a>(table: &'a InlineTable<'a>, context: &mut Con
       open: sc!("{"),
       close: sc!("}"),
       comment_after_open: table.comment_after_open.as_ref(),
-      comments_before_close: &table.comments_before_close,
+      comments_before_close: table.comments_before_close,
     },
     |context| {
       if table.entries.is_empty() {
