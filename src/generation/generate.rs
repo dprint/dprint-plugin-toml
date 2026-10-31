@@ -3,6 +3,7 @@ use dprint_core::formatting::ir_helpers::SingleLineOptions;
 use dprint_core::formatting::*;
 use dprint_core_macros::sc;
 
+use super::BumpVec;
 use super::Context;
 use crate::ast::*;
 use crate::configuration::Configuration;
@@ -22,7 +23,7 @@ pub fn generate<'a>(arena: &'a Arena, root: &'a Root<'a>, config: &'a Configurat
 }
 
 fn gen_root<'a>(root: &'a Root<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
-  let indents = indent_levels(root, context.config);
+  let indents = indent_levels(context.arena, root, context.config);
   let mut items = PrintItems::new(context.arena);
   let mut previous: Option<&RootItem> = None;
   for (i, item) in root.items.iter().enumerate() {
@@ -46,13 +47,13 @@ fn gen_root<'a>(root: &'a Root<'a>, context: &mut Context<'a>) -> PrintItems<'a>
 /// `[a.b]` beneath `[a]` sits one level in while `[a.b]` beneath nothing at all sits at the
 /// margin. A table's body -- its entries and the comments among them -- follows its header, one
 /// level further in when entries are indented.
-fn indent_levels(root: &Root, config: &Configuration) -> Vec<u32> {
-  let mut levels = vec![0u32; root.items.len()];
+fn indent_levels<'a>(arena: &'a Arena, root: &Root, config: &Configuration) -> BumpVec<'a, u32> {
+  let mut levels = bumpalo::vec![in arena.bump(); 0u32; root.items.len()];
   // the level a comment falls back to when it closes off its section rather than introducing the
   // item beneath it
-  let mut section_levels = vec![0u32; root.items.len()];
+  let mut section_levels = bumpalo::vec![in arena.bump(); 0u32; root.items.len()];
   // the headers enclosing the item being looked at, each naming an ancestor of the next
-  let mut open_tables: Vec<&Key> = Vec::new();
+  let mut open_tables: BumpVec<&Key> = BumpVec::new_in(arena.bump());
   // the whole body of a section shares one level, so it is worked out at the header rather than
   // an item at a time -- a comment sitting above the section's first entry needs it too
   let mut body_level = 0;
@@ -190,10 +191,10 @@ fn gen_key<'a>(arena: &'a Arena, key: &'a Key<'a>) -> PrintItems<'a> {
 /// Spec: Values must be either String, Integer, Float, Boolean, DateTimes, Array, InlineTable
 fn gen_value<'a>(value: &'a Value<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   match &value.kind {
-    ValueKind::Scalar(text) => match requoted_string(text, context.config.quote_style) {
-      Some(text) => ir_helpers::gen_from_string(context.arena, context.arena.bump().alloc_str(&text)),
-      None => ir_helpers::gen_from_string(context.arena, text),
-    },
+    ValueKind::Scalar(text) => {
+      let text = requoted_string(context.arena, text, context.config.quote_style).unwrap_or(text);
+      ir_helpers::gen_from_string(context.arena, text)
+    }
     ValueKind::MultiLineString(text) => {
       let mut items = PrintItems::new(context.arena);
       items.push_force_current_line_indentation();
@@ -205,15 +206,15 @@ fn gen_value<'a>(value: &'a Value<'a>, context: &mut Context<'a>) -> PrintItems<
   }
 }
 
-/// The text of a single-line string rewritten with the preferred quote, or `None` when it is
-/// already written with it or cannot be rewritten.
+/// The text of a single-line string rewritten with the preferred quote and allocated in the arena,
+/// or `None` when it is already written with it or cannot be rewritten.
 ///
 /// A basic string reads a backslash as beginning an escape where a literal string reads it as
 /// itself, so the two spell the same value differently as soon as one appears. Rewriting such a
 /// string means rewriting its contents, and rewriting one that already holds the preferred quote
 /// means escaping that quote — neither of which is done here. The point is to settle on one quote
 /// wherever it costs nothing, not to make every string look the same.
-fn requoted_string(text: &str, style: QuoteStyle) -> Option<String> {
+fn requoted_string<'a>(arena: &'a Arena, text: &str, style: QuoteStyle) -> Option<&'a str> {
   let (from, to) = match style {
     QuoteStyle::Maintain => return None,
     QuoteStyle::PreferDouble => ('\'', '"'),
@@ -223,11 +224,11 @@ fn requoted_string(text: &str, style: QuoteStyle) -> Option<String> {
   if inner.contains('\\') || inner.contains(to) {
     return None;
   }
-  let mut result = String::with_capacity(text.len());
+  let mut result = bumpalo::collections::String::with_capacity_in(text.len(), arena.bump());
   result.push(to);
   result.push_str(inner);
   result.push(to);
-  Some(result)
+  Some(result.into_bump_str())
 }
 
 // ---- arrays ----
@@ -475,7 +476,7 @@ where
   ir_helpers::gen_separated_values(
     |is_multi_line_ref| {
       let count = items.len();
-      let mut generated = Vec::with_capacity(count);
+      let mut generated = BumpVec::with_capacity_in(count, arena.bump());
       // Synthetic line numbers rather than source positions: a blank line is preserved because the
       // author asked for one, and the item may since have been moved by the Cargo.toml sorting,
       // which would leave any position taken from the source pointing at the wrong line.
@@ -583,7 +584,7 @@ fn gen_comment_text<'a>(comment: &'a Comment<'a>, context: &mut Context<'a>) -> 
     return ir_helpers::gen_from_raw_string(context.arena, &comment.text[..info.start_text_index + after_hash_text.len()]);
   }
 
-  let mut text = String::with_capacity(comment.text.len() + 1);
+  let mut text = bumpalo::collections::String::with_capacity_in(comment.text.len() + 1, context.arena.bump());
   for _ in 0..info.leading_hashes_count {
     text.push('#');
   }
@@ -592,7 +593,7 @@ fn gen_comment_text<'a>(comment: &'a Comment<'a>, context: &mut Context<'a>) -> 
   }
   text.push(' ');
   text.push_str(after_hash_text);
-  ir_helpers::gen_from_raw_string(context.arena, context.arena.bump().alloc_str(&text))
+  ir_helpers::gen_from_raw_string(context.arena, text.into_bump_str())
 }
 
 struct CommentTextInfo {

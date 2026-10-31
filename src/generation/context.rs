@@ -2,6 +2,9 @@ use dprint_core::formatting::Arena;
 
 use crate::configuration::Configuration;
 
+/// A vector allocated in the arena, which is freed along with the print items.
+pub type BumpVec<'a, T> = dprint_core::formatting::bumpalo::collections::Vec<'a, T>;
+
 pub struct Context<'a> {
   pub arena: &'a Arena,
   pub config: &'a Configuration,
