@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 
 use crate::ast::*;
 use crate::configuration::Configuration;
+use crate::generation::BumpVec;
 
 /// Applies whichever of the sorting options are turned on.
 pub fn apply_sorting(root: &mut Root, config: &Configuration, reorder_entries: bool) {
@@ -142,8 +143,8 @@ pub fn section_end(items: &[RootItem], start: usize) -> usize {
 /// Something that can be sorted among its siblings, carrying the comments written above it.
 pub trait Sortable<'a> {
   fn leading_comments(&self) -> &[Comment<'a>];
-  fn take_leading_comments(&mut self) -> Vec<Comment<'a>>;
-  fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>);
+  fn take_leading_comments(&mut self) -> BumpVec<'a, Comment<'a>>;
+  fn set_leading_comments(&mut self, comments: BumpVec<'a, Comment<'a>>);
   fn blank_line_before(&self) -> bool;
   fn set_blank_line_before(&mut self, value: bool);
 
@@ -156,10 +157,10 @@ impl<'a> Sortable<'a> for ArrayValue<'a> {
   fn leading_comments(&self) -> &[Comment<'a>] {
     &self.leading_comments
   }
-  fn take_leading_comments(&mut self) -> Vec<Comment<'a>> {
-    std::mem::take(&mut self.leading_comments)
+  fn take_leading_comments(&mut self) -> BumpVec<'a, Comment<'a>> {
+    take(&mut self.leading_comments)
   }
-  fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>) {
+  fn set_leading_comments(&mut self, comments: BumpVec<'a, Comment<'a>>) {
     self.leading_comments = comments;
   }
   fn blank_line_before(&self) -> bool {
@@ -179,10 +180,10 @@ impl<'a> Sortable<'a> for Entry<'a> {
   fn leading_comments(&self) -> &[Comment<'a>] {
     &self.leading_comments
   }
-  fn take_leading_comments(&mut self) -> Vec<Comment<'a>> {
-    std::mem::take(&mut self.leading_comments)
+  fn take_leading_comments(&mut self) -> BumpVec<'a, Comment<'a>> {
+    take(&mut self.leading_comments)
   }
-  fn set_leading_comments(&mut self, comments: Vec<Comment<'a>>) {
+  fn set_leading_comments(&mut self, comments: BumpVec<'a, Comment<'a>>) {
     self.leading_comments = comments;
   }
   fn blank_line_before(&self) -> bool {
@@ -200,21 +201,20 @@ impl<'a> Sortable<'a> for Entry<'a> {
 
 /// Sorts values that hold their own leading comments, such as the values of an array or the
 /// entries of an inline table.
-pub fn sort_with_comments<'a, T: Sortable<'a>>(values: &mut Vec<T>, cmp: impl Fn(&T, &T) -> Ordering) {
-  let mut units = values
-    .drain(..)
-    .map(|mut value| Unit {
-      leading_blank: value
-        .leading_comments()
-        .first()
-        .map(|c| c.blank_line_before)
-        .unwrap_or(value.blank_line_before()),
-      inner_blank: !value.leading_comments().is_empty() && value.blank_line_before(),
-      starts_group: value.blank_line_before() || value.leading_comments().iter().any(|c| c.blank_line_before),
-      leading_comments: value.take_leading_comments(),
-      value,
-    })
-    .collect::<Vec<_>>();
+pub fn sort_with_comments<'a, T: Sortable<'a>>(values: &mut BumpVec<'a, T>, cmp: impl Fn(&T, &T) -> Ordering) {
+  let bump = values.bump();
+  let units = values.drain(..).map(|mut value| Unit {
+    leading_blank: value
+      .leading_comments()
+      .first()
+      .map(|c| c.blank_line_before)
+      .unwrap_or(value.blank_line_before()),
+    inner_blank: !value.leading_comments().is_empty() && value.blank_line_before(),
+    starts_group: value.blank_line_before() || value.leading_comments().iter().any(|c| c.blank_line_before),
+    leading_comments: value.take_leading_comments(),
+    value,
+  });
+  let mut units = BumpVec::from_iter_in(units, bump);
   sort_units(&mut units, cmp);
   values.extend(units.into_iter().map(|mut unit| {
     match unit.leading_comments.first_mut() {
@@ -231,7 +231,7 @@ pub fn sort_with_comments<'a, T: Sortable<'a>>(values: &mut Vec<T>, cmp: impl Fn
 
 /// One sortable thing along with the comments written above it.
 struct Unit<'a, T> {
-  leading_comments: Vec<Comment<'a>>,
+  leading_comments: BumpVec<'a, Comment<'a>>,
   /// Whether a blank line is rendered above this unit's first element.
   leading_blank: bool,
   /// Whether a blank line is rendered between this unit's comments and the item itself. Only
@@ -245,11 +245,12 @@ struct Unit<'a, T> {
 }
 
 /// Sorts the entries of `items[start..end]`, keeping each entry's own comments with it.
-pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl Fn(&Entry, &Entry) -> Ordering) {
+pub fn sort_root_entries<'a>(items: &mut BumpVec<'a, RootItem<'a>>, start: usize, end: usize, cmp: &impl Fn(&Entry, &Entry) -> Ordering) {
+  let bump = items.bump();
   // Split the section into one unit per entry, each carrying the comments written above it. Any
   // comments after the final entry belong to no entry and stay where they are.
-  let mut units: Vec<Unit<Entry>> = Vec::with_capacity(end - start);
-  let mut pending: Vec<Comment> = Vec::new();
+  let mut units: BumpVec<Unit<Entry>> = BumpVec::with_capacity_in(end - start, bump);
+  let mut pending: BumpVec<Comment> = BumpVec::new_in(bump);
   for item in items.drain(start..end) {
     match item {
       RootItem::Comment(comment) => pending.push(comment),
@@ -257,7 +258,7 @@ pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cm
         leading_blank: pending.first().map(|c| c.blank_line_before).unwrap_or(entry.blank_line_before),
         inner_blank: !pending.is_empty() && entry.blank_line_before,
         starts_group: entry.blank_line_before || pending.iter().any(|c| c.blank_line_before),
-        leading_comments: std::mem::take(&mut pending),
+        leading_comments: take(&mut pending),
         value: entry,
       }),
       // a section runs up to the next header, so nothing else can appear in it
@@ -268,7 +269,7 @@ pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cm
 
   sort_units(&mut units, |left, right| cmp(left, right));
 
-  let mut sorted = Vec::with_capacity(end - start);
+  let mut sorted = BumpVec::with_capacity_in(end - start, bump);
   for unit in units {
     let leading_blank = unit.leading_blank;
     let mut entry = unit.value;
@@ -316,7 +317,7 @@ fn heading_comment_count<T>(unit: &Unit<T>) -> usize {
   }
 }
 
-fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
+fn sort_units<'a, T>(units: &mut [Unit<'a, T>], cmp: impl Fn(&T, &T) -> Ordering) {
   let mut group_start = 0;
   while group_start < units.len() {
     let mut group_end = group_start + 1;
@@ -332,7 +333,8 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
     // sorted; whatever comments are left below the split describe that entry and travel with it.
     let (group_comments, blank_under_heading) = if is_heading {
       let head = &mut group[0];
-      let mut group_comments = head.leading_comments.drain(..heading_len).collect::<Vec<_>>();
+      let bump = head.leading_comments.bump();
+      let mut group_comments = BumpVec::from_iter_in(head.leading_comments.drain(..heading_len), bump);
       let blank = match head.leading_comments.first_mut() {
         // the blank that separated the heading from the comments describing the entry
         Some(first) => std::mem::replace(&mut first.blank_line_before, false),
@@ -345,7 +347,7 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
       }
       (group_comments, blank)
     } else {
-      (Vec::new(), false)
+      (BumpVec::new_in(group[0].leading_comments.bump()), false)
     };
 
     group.sort_by(|left, right| cmp(&left.value, &right.value));
@@ -366,4 +368,10 @@ fn sort_units<T>(units: &mut [Unit<T>], cmp: impl Fn(&T, &T) -> Ordering) {
 
     group_start = group_end;
   }
+}
+
+/// Takes the comments out of the vector, leaving an empty one in the same arena.
+fn take<'a>(comments: &mut BumpVec<'a, Comment<'a>>) -> BumpVec<'a, Comment<'a>> {
+  let empty = BumpVec::new_in(comments.bump());
+  std::mem::replace(comments, empty)
 }
