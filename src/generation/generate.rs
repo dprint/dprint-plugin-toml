@@ -2,7 +2,6 @@ use dprint_core::formatting::conditions::*;
 use dprint_core::formatting::ir_helpers::SingleLineOptions;
 use dprint_core::formatting::*;
 use dprint_core_macros::sc;
-use std::rc::Rc;
 
 use super::Context;
 use crate::ast::*;
@@ -11,20 +10,20 @@ use crate::configuration::IndentKind;
 use crate::configuration::QuoteStyle;
 use crate::configuration::TrailingCommaKind;
 
-pub fn generate(root: &Root, config: &Configuration) -> PrintItems {
-  let mut context = Context::new(config);
+pub fn generate<'a>(arena: &'a Arena, root: &'a Root<'a>, config: &'a Configuration) -> PrintItems<'a> {
+  let mut context = Context::new(arena, config);
   let mut items = gen_root(root, &mut context);
   items.push_condition(if_true(
     "endOfFileNewLine",
-    Rc::new(|context| Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0)),
-    Signal::NewLine.into(),
+    arena.alloc_resolver(|context| Some(context.writer_info.column_number > 0 || context.writer_info.line_number > 0)),
+    Signal::NewLine.into_print_items(arena),
   ));
   items
 }
 
-fn gen_root(root: &Root, context: &mut Context) -> PrintItems {
+fn gen_root<'a>(root: &'a Root<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   let indents = indent_levels(root, context.config);
-  let mut items = PrintItems::new();
+  let mut items = PrintItems::new(context.arena);
   let mut previous: Option<&RootItem> = None;
   for (i, item) in root.items.iter().enumerate() {
     if let Some(previous) = previous {
@@ -141,7 +140,7 @@ fn allow_blank_line(previous: &RootItem, current: &RootItem) -> bool {
   current.is_table_header() || !previous.is_table_header()
 }
 
-fn gen_root_item(item: &RootItem, context: &mut Context) -> PrintItems {
+fn gen_root_item<'a>(item: &'a RootItem<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   match item {
     RootItem::Comment(comment) => gen_comment(comment, context),
     RootItem::Entry(entry) => gen_entry(entry, context),
@@ -149,11 +148,11 @@ fn gen_root_item(item: &RootItem, context: &mut Context) -> PrintItems {
   }
 }
 
-fn gen_table_header(header: &TableHeader, context: &mut Context) -> PrintItems {
+fn gen_table_header<'a>(header: &'a TableHeader<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   // Spec: Naming rules for tables are the same as for keys
-  let mut items = PrintItems::new();
+  let mut items = PrintItems::new(context.arena);
   items.push_sc(if header.is_array_of_tables { sc!("[[") } else { sc!("[") });
-  items.extend(gen_key(&header.key));
+  items.extend(gen_key(context.arena, &header.key));
   items.push_sc(if header.is_array_of_tables { sc!("]]") } else { sc!("]") });
   if let Some(comment) = &header.trailing_comment {
     items.extend(gen_comment(comment, context));
@@ -161,7 +160,7 @@ fn gen_table_header(header: &TableHeader, context: &mut Context) -> PrintItems {
   items
 }
 
-fn gen_entry(entry: &Entry, context: &mut Context) -> PrintItems {
+fn gen_entry<'a>(entry: &'a Entry<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   let mut items = gen_entry_without_trailing_comment(entry, context);
   if let Some(comment) = &entry.trailing_comment {
     items.extend(gen_comment(comment, context));
@@ -169,36 +168,36 @@ fn gen_entry(entry: &Entry, context: &mut Context) -> PrintItems {
   items
 }
 
-fn gen_entry_without_trailing_comment(entry: &Entry, context: &mut Context) -> PrintItems {
-  let mut items = gen_key(&entry.key);
+fn gen_entry_without_trailing_comment<'a>(entry: &'a Entry<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
+  let mut items = gen_key(context.arena, &entry.key);
   items.push_sc(if context.config.space_surrounding_equals { sc!(" = ") } else { sc!("=") });
   items.extend(gen_value(&entry.value, context));
   items
 }
 
 /// Spec: A key may be either bare, quoted, or dotted.
-fn gen_key(key: &Key) -> PrintItems {
-  let mut items = PrintItems::new();
+fn gen_key<'a>(arena: &'a Arena, key: &'a Key<'a>) -> PrintItems<'a> {
+  let mut items = PrintItems::new(arena);
   for (i, part) in key.parts().enumerate() {
     if i > 0 {
       items.push_sc(sc!("."));
     }
-    items.extend(ir_helpers::gen_from_string(part.text));
+    items.extend(ir_helpers::gen_from_string(arena, part.text));
   }
   items
 }
 
 /// Spec: Values must be either String, Integer, Float, Boolean, DateTimes, Array, InlineTable
-fn gen_value(value: &Value, context: &mut Context) -> PrintItems {
+fn gen_value<'a>(value: &'a Value<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   match &value.kind {
     ValueKind::Scalar(text) => match requoted_string(text, context.config.quote_style) {
-      Some(text) => ir_helpers::gen_from_string(&text),
-      None => ir_helpers::gen_from_string(text),
+      Some(text) => ir_helpers::gen_from_string(context.arena, context.arena.bump().alloc_str(&text)),
+      None => ir_helpers::gen_from_string(context.arena, text),
     },
     ValueKind::MultiLineString(text) => {
-      let mut items = PrintItems::new();
+      let mut items = PrintItems::new(context.arena);
       items.push_force_current_line_indentation();
-      items.extend(ir_helpers::gen_from_raw_string(text));
+      items.extend(ir_helpers::gen_from_raw_string(context.arena, text));
       items
     }
     ValueKind::Array(array) => gen_array(array, context),
@@ -233,7 +232,7 @@ fn requoted_string(text: &str, style: QuoteStyle) -> Option<String> {
 
 // ---- arrays ----
 
-fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
+fn gen_array<'a>(array: &'a Array<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   if context.are_arrays_collapsed() {
     // An array laid out without the line width is collapsed onto its table's line, so its values
     // are separated by hard spaces rather than by anything that could break. Its comments are
@@ -247,7 +246,7 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
         comments_before_close: &array.comments_before_close,
       },
       |context| {
-        let mut items = PrintItems::new();
+        let mut items = PrintItems::new(context.arena);
         // Each side is padded on its own, and only when nothing beside it already writes a space:
         // a comment is generated with a leading space of its own, and one against a bracket would
         // otherwise be pushed out to two.
@@ -299,7 +298,11 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
     },
     |context| {
       if array.values.is_empty() {
-        return if force_use_new_lines { Signal::NewLine.into() } else { PrintItems::new() };
+        return if force_use_new_lines {
+          Signal::NewLine.into_print_items(context.arena)
+        } else {
+          PrintItems::new(context.arena)
+        };
       }
       gen_separated(&array.values, force_use_new_lines, space_within_single_line, context)
     },
@@ -309,7 +312,7 @@ fn gen_array(array: &Array, context: &mut Context) -> PrintItems {
 
 // ---- inline tables ----
 
-fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
+fn gen_inline_table<'a>(table: &'a InlineTable<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   // TOML 1.1 allows an inline table to be written over several lines. The author chose that, so
   // keep it; a table written on one line is never expanded, which would produce syntax a 1.0 parser
   // rejects. A table holding a comment of its own is multi-line whatever follows its brace, since a
@@ -324,7 +327,7 @@ fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
   }
 
   let pad = context.config.inline_table_space_surrounding_braces && !table.entries.is_empty();
-  let mut items = PrintItems::new();
+  let mut items = PrintItems::new(context.arena);
   context.with_single_line_table(table.contains_multi_line_string(), |context| {
     items.push_sc(sc!("{"));
     for (i, entry) in table.entries.iter().enumerate() {
@@ -353,7 +356,7 @@ fn gen_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
   items
 }
 
-fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> PrintItems {
+fn gen_multi_line_inline_table<'a>(table: &'a InlineTable<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   gen_surrounded(
     SurroundedParams {
       open: sc!("{"),
@@ -363,7 +366,7 @@ fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> Pr
     },
     |context| {
       if table.entries.is_empty() {
-        return Signal::NewLine.into();
+        return Signal::NewLine.into_print_items(context.arena);
       }
       gen_separated(&table.entries, true, false, context)
     },
@@ -374,14 +377,14 @@ fn gen_multi_line_inline_table(table: &InlineTable, context: &mut Context) -> Pr
 // ---- shared bracket handling ----
 
 struct SurroundedParams<'a> {
-  open: &'static StringContainer,
-  close: &'static StringContainer,
+  open: &'static StringContainer<'static>,
+  close: &'static StringContainer<'static>,
   comment_after_open: Option<&'a Comment<'a>>,
   comments_before_close: &'a [Comment<'a>],
 }
 
-fn gen_surrounded(params: SurroundedParams, gen_inner: impl FnOnce(&mut Context) -> PrintItems, context: &mut Context) -> PrintItems {
-  let mut items = PrintItems::new();
+fn gen_surrounded<'a>(params: SurroundedParams<'a>, gen_inner: impl FnOnce(&mut Context<'a>) -> PrintItems<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
+  let mut items = PrintItems::new(context.arena);
   items.push_sc(params.open);
   if let Some(comment) = params.comment_after_open {
     items.extend(gen_comment(comment, context));
@@ -461,10 +464,11 @@ fn blank_line_before_item(leading_comments: &[Comment<'_>], blank_line_before: b
 
 /// `items` is the array's values or the table's entries; each is turned into a [`SeparatedItem`]
 /// as it is reached rather than up front, so the whole run is never collected into a `Vec`.
-fn gen_separated<'a, T>(items: &'a [T], force_use_new_lines: bool, space_within_single_line: bool, context: &mut Context) -> PrintItems
+fn gen_separated<'a, T>(items: &'a [T], force_use_new_lines: bool, space_within_single_line: bool, context: &mut Context<'a>) -> PrintItems<'a>
 where
   &'a T: IntoSeparatedItem<'a>,
 {
+  let arena = context.arena;
   let indent_width = context.config.indent_width;
   let trailing_commas = context.config.trailing_commas;
   let line_context = context.line_context();
@@ -486,14 +490,14 @@ where
         });
         let generated_comma = if i == count - 1 {
           match trailing_commas {
-            TrailingCommaKind::Never => PrintItems::new(),
+            TrailingCommaKind::Never => PrintItems::new(arena),
             TrailingCommaKind::OnlyMultiLine => {
-              let is_multi_line = is_multi_line_ref.create_resolver();
-              if_true("commaIfMultiLine", is_multi_line, ",".into()).into()
+              let is_multi_line = is_multi_line_ref.create_resolver(arena);
+              if_true("commaIfMultiLine", is_multi_line, ",".into_print_items(arena)).into_print_items(arena)
             }
           }
         } else {
-          ",".into()
+          ",".into_print_items(arena)
         };
         let is_known_multi_line = item.is_known_multi_line;
         generated.push(ir_helpers::GeneratedValue {
@@ -510,11 +514,11 @@ where
     ir_helpers::GenSeparatedValuesOptions {
       prefer_hanging: false,
       force_use_new_lines,
-      allow_blank_lines: true,
+      max_blank_lines: 1,
       single_line_options: SingleLineOptions {
         space_at_start: space_within_single_line,
         space_at_end: space_within_single_line,
-        separator: Signal::SpaceOrNewLine.into(),
+        separator: Signal::SpaceOrNewLine.into_print_items(arena),
       },
       indent_width,
       multi_line_options: ir_helpers::MultiLineOptions::surround_newlines_indented(),
@@ -524,8 +528,8 @@ where
   .items
 }
 
-fn gen_separated_item(item: SeparatedItem, generated_comma: PrintItems, context: &mut Context) -> PrintItems {
-  let mut items = PrintItems::new();
+fn gen_separated_item<'a>(item: SeparatedItem<'a>, generated_comma: PrintItems<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
+  let mut items = PrintItems::new(context.arena);
   for (i, comment) in item.leading_comments.iter().enumerate() {
     // a blank above the first comment separates this item from the previous one, which the
     // separator between items has already accounted for
@@ -553,17 +557,21 @@ fn gen_separated_item(item: SeparatedItem, generated_comma: PrintItems, context:
 
 // ---- comments ----
 
-fn gen_comment(comment: &Comment, context: &mut Context) -> PrintItems {
-  let mut items = PrintItems::new();
-  items.push_condition(if_false("spaceIfNotStartOfLine", condition_resolvers::is_start_of_line(), " ".into()));
+fn gen_comment<'a>(comment: &'a Comment<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
+  let mut items = PrintItems::new(context.arena);
+  items.push_condition(if_false(
+    "spaceIfNotStartOfLine",
+    condition_resolvers::is_start_of_line(),
+    " ".into_print_items(context.arena),
+  ));
   items.extend(gen_comment_text(comment, context));
   items.push_signal(Signal::ExpectNewLine);
   items
 }
 
-fn gen_comment_text(comment: &Comment, context: &mut Context) -> PrintItems {
+fn gen_comment_text<'a>(comment: &'a Comment<'a>, context: &mut Context<'a>) -> PrintItems<'a> {
   if !context.config.comment_force_leading_space {
-    return ir_helpers::gen_from_raw_string(comment.text);
+    return ir_helpers::gen_from_raw_string(context.arena, comment.text);
   }
 
   let info = get_comment_text_info(comment.text);
@@ -572,7 +580,7 @@ fn gen_comment_text(comment: &Comment, context: &mut Context) -> PrintItems {
   // there is no text at all, so rebuilding would only reproduce the source text. Almost every
   // comment in a real file takes this path, and rendering the slice saves building the copy.
   if info.has_leading_whitespace || after_hash_text.is_empty() {
-    return ir_helpers::gen_from_raw_string(&comment.text[..info.start_text_index + after_hash_text.len()]);
+    return ir_helpers::gen_from_raw_string(context.arena, &comment.text[..info.start_text_index + after_hash_text.len()]);
   }
 
   let mut text = String::with_capacity(comment.text.len() + 1);
@@ -584,7 +592,7 @@ fn gen_comment_text(comment: &Comment, context: &mut Context) -> PrintItems {
   }
   text.push(' ');
   text.push_str(after_hash_text);
-  ir_helpers::gen_from_raw_string(&text)
+  ir_helpers::gen_from_raw_string(context.arena, context.arena.bump().alloc_str(&text))
 }
 
 struct CommentTextInfo {

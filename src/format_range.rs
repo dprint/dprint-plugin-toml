@@ -5,12 +5,13 @@ use std::path::Path;
 
 use dprint_core::configuration::resolve_new_line_kind;
 use dprint_core::configuration::NewLineKind;
+use dprint_core::formatting::ArenaPool;
 
 use super::configuration::Configuration;
 use crate::ast::Root;
 use crate::ast::RootItem;
 use crate::error::FormatError;
-use crate::format_text::format_text;
+use crate::format_text::format_text_with_arena_pool;
 use crate::format_text::parse;
 use crate::format_text::print;
 use crate::format_text::process_node;
@@ -35,13 +36,25 @@ use crate::sorting::section_end;
 /// both the first and last of the file's entries, table headers and comments formats the whole
 /// file and one that only touches blank lines formats nothing.
 pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, config: &Configuration) -> Result<Option<String>, FormatError> {
+  format_text_range_with_arena_pool(file_path, text, range, config, None)
+}
+
+/// Formats only the part of the text within the provided byte range, creating the arenas for
+/// formatting from the pool when given one.
+pub(crate) fn format_text_range_with_arena_pool(
+  file_path: &Path,
+  text: &str,
+  range: Range<usize>,
+  config: &Configuration,
+  arena_pool: Option<&ArenaPool>,
+) -> Result<Option<String>, FormatError> {
   let body = strip_bom(text);
   let bom_len = text.len() - body.len();
   let end = range.end.saturating_sub(bom_len).min(body.len());
   let range = range.start.saturating_sub(bom_len).min(end)..end;
   // also what formats a file that only has blank lines, which has nothing to touch
   if range.start == 0 && range.end == body.len() {
-    return format_text(file_path, text, config);
+    return format_text_with_arena_pool(file_path, text, config, arena_pool);
   }
 
   let mut root = parse(body)?;
@@ -52,7 +65,7 @@ pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, conf
   // the blank lines at the start of the file and the newline at its end belong to no item, so
   // they are only formatted along with all of it
   if touched == (0..=starts.len() - 1) {
-    return format_text(file_path, text, config);
+    return format_text_with_arena_pool(file_path, text, config, arena_pool);
   }
 
   process_node(file_path, &mut root, config, true);
@@ -68,7 +81,7 @@ pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, conf
   }
   attempts.push((!reorders, tables));
 
-  let reordered = Formatted::new(print(&root, body, config))?;
+  let reordered = Formatted::new(print(&root, body, config, arena_pool))?;
   let mut kept = None;
   for (reorder_entries, items) in attempts {
     let formatted = if reorder_entries {
@@ -76,7 +89,7 @@ pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, conf
     } else if let Some(kept) = &kept {
       kept
     } else {
-      kept.insert(Formatted::new(format_body(file_path, body, config, false)?)?)
+      kept.insert(Formatted::new(format_body(file_path, body, config, false, arena_pool)?)?)
     };
     debug_assert_eq!(formatted.starts.len(), starts.len());
     let original = lines_range(body, item_range(body, &starts, items.clone()));
@@ -87,12 +100,12 @@ pub fn format_text_range(file_path: &Path, text: &str, range: Range<usize>, conf
       with_file_new_lines(&formatted.text[replacement], body),
       &body[original.end..]
     );
-    if format_body(file_path, &spliced, config, reorder_entries)? == formatted.text {
+    if format_body(file_path, &spliced, config, reorder_entries, arena_pool)? == formatted.text {
       let result = format!("{}{}", &text[..bom_len], spliced);
       return Ok(if result == text { None } else { Some(result) });
     }
   }
-  format_text(file_path, text, config)
+  format_text_with_arena_pool(file_path, text, config, arena_pool)
 }
 
 /// The file once formatted along with where each of its items starts.
@@ -108,10 +121,10 @@ impl Formatted {
   }
 }
 
-fn format_body(file_path: &Path, body: &str, config: &Configuration, reorder_entries: bool) -> Result<String, FormatError> {
+fn format_body(file_path: &Path, body: &str, config: &Configuration, reorder_entries: bool, arena_pool: Option<&ArenaPool>) -> Result<String, FormatError> {
   let mut root = parse(body)?;
   process_node(file_path, &mut root, config, reorder_entries);
-  Ok(print(&root, body, config))
+  Ok(print(&root, body, config, arena_pool))
 }
 
 /// Where each of the root's items starts in the text it was parsed from.
@@ -192,6 +205,7 @@ fn with_file_new_lines<'a>(formatted: &'a str, file_text: &str) -> Cow<'a, str> 
 mod test {
   use super::*;
   use crate::configuration::ConfigurationBuilder;
+  use crate::format_text::format_text;
 
   #[test]
   fn keeps_bom_outside_range() {

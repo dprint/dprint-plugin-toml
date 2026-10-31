@@ -1,6 +1,9 @@
+use dprint_core::formatting::Arena;
+
 use crate::configuration::Configuration;
 
 pub struct Context<'a> {
+  pub arena: &'a Arena,
   pub config: &'a Configuration,
   /// How many single-line inline tables enclose whatever is being generated. A table within one is
   /// kept on a single line too, since a newline between its braces would not be within a value.
@@ -13,8 +16,9 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-  pub fn new(config: &'a Configuration) -> Self {
+  pub fn new(arena: &'a Arena, config: &'a Configuration) -> Self {
     Self {
+      arena,
       config,
       single_line_table_depth: 0,
       collapsed_arrays_depth: 0,
