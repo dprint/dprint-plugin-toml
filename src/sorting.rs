@@ -248,9 +248,8 @@ struct Unit<'a, T> {
 pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cmp: &impl Fn(&Entry, &Entry) -> Ordering) {
   // Split the section into one unit per entry, each carrying the comments written above it. Any
   // comments after the final entry belong to no entry and stay where they are.
-  let mut units: Vec<Unit<Entry>> = Vec::new();
+  let mut units: Vec<Unit<Entry>> = Vec::with_capacity(end - start);
   let mut pending: Vec<Comment> = Vec::new();
-  let mut trailing: Vec<Comment> = Vec::new();
   for item in items.drain(start..end) {
     match item {
       RootItem::Comment(comment) => pending.push(comment),
@@ -265,31 +264,27 @@ pub fn sort_root_entries(items: &mut Vec<RootItem>, start: usize, end: usize, cm
       RootItem::TableHeader(_) => unreachable!(),
     }
   }
-  trailing.append(&mut pending);
+  let trailing = pending;
 
   sort_units(&mut units, |left, right| cmp(left, right));
 
-  let sorted = units
-    .into_iter()
-    .flat_map(|unit| {
-      let leading_blank = unit.leading_blank;
-      let mut entry = unit.value;
-      let mut items = Vec::with_capacity(unit.leading_comments.len() + 1);
-      let mut comments = unit.leading_comments.into_iter();
-      match comments.next() {
-        Some(mut first) => {
-          first.blank_line_before = leading_blank;
-          items.push(RootItem::Comment(first));
-          items.extend(comments.map(RootItem::Comment));
-          entry.blank_line_before = unit.inner_blank;
-        }
-        None => entry.blank_line_before = leading_blank,
+  let mut sorted = Vec::with_capacity(end - start);
+  for unit in units {
+    let leading_blank = unit.leading_blank;
+    let mut entry = unit.value;
+    let mut comments = unit.leading_comments.into_iter();
+    match comments.next() {
+      Some(mut first) => {
+        first.blank_line_before = leading_blank;
+        sorted.push(RootItem::Comment(first));
+        sorted.extend(comments.map(RootItem::Comment));
+        entry.blank_line_before = unit.inner_blank;
       }
-      items.push(RootItem::Entry(entry));
-      items
-    })
-    .chain(trailing.into_iter().map(RootItem::Comment))
-    .collect::<Vec<_>>();
+      None => entry.blank_line_before = leading_blank,
+    }
+    sorted.push(RootItem::Entry(entry));
+  }
+  sorted.extend(trailing.into_iter().map(RootItem::Comment));
   items.splice(start..start, sorted);
 }
 
