@@ -46,6 +46,7 @@ impl SyncPluginHandler<Configuration> for TomlPluginHandler {
       help_url: "https://dprint.dev/plugins/toml".to_string(),
       config_schema_url: format!("https://plugins.dprint.dev/dprint/dprint-plugin-toml/{}/schema.json", version),
       update_url: Some("https://plugins.dprint.dev/dprint/dprint-plugin-toml/latest.json".to_string()),
+      supports_range_formatting: Some(true),
     }
   }
 
