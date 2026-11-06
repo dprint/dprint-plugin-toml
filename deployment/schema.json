@@ -2,6 +2,76 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://plugins.dprint.dev/dprint/dprint-plugin-toml/0.0.0/schema.json",
   "type": "object",
+  "x-playground": {
+    "input": [
+      "#inventory service settings",
+      "title='Inventory Service'",
+      "  version=\"1.4.0\"",
+      "tags=[\"api\",\"inventory\",",
+      "\"internal\"]",
+      "",
+      "[server]",
+      "host=\"0.0.0.0\"",
+      "port   =   8080",
+      "  timeouts={read=30,write=30}",
+      "",
+      "[database]",
+      "url = 'postgres://localhost:5432/inventory'",
+      "pool = { min=2,max=10 }",
+      "",
+      "",
+      "[[workers]]",
+      "name=\"indexer\"",
+      "schedule = \"*/5 * * * *\"",
+      "[[workers]]",
+      "name   = \"mailer\"",
+      "retryDelays=[100,500,",
+      "  2000]"
+    ]
+  },
+  "x-sections": [{
+    "title": "General",
+    "description": "The width, indentation, and newlines of the file.",
+    "properties": [
+      "lineWidth",
+      "indentWidth",
+      "useTabs",
+      "newLineKind"
+    ]
+  }, {
+    "title": "Tables",
+    "description": "The indentation of table headers and their entries.",
+    "properties": [
+      "indentTables",
+      "indentEntries"
+    ]
+  }, {
+    "title": "Arrays and inline tables",
+    "description": "When arrays and inline tables go on a single line, and their spacing and trailing commas.",
+    "properties": [
+      "preferSingleLine",
+      "trailingCommas",
+      "array.spaceSurroundingBrackets",
+      "inlineTable.spaceSurroundingBraces"
+    ]
+  }, {
+    "title": "Values and comments",
+    "description": "The quotes of strings and the spacing of key/value pairs and comments.",
+    "properties": [
+      "quoteStyle",
+      "spaceSurroundingEquals",
+      "comment.forceLeadingSpace"
+    ]
+  }, {
+    "title": "Sorting",
+    "description": "The order of the entries of tables and inline tables and the values of arrays.",
+    "properties": [
+      "sortKeys",
+      "sortArrays",
+      "sortInlineTables",
+      "cargo.applyConventions"
+    ]
+  }],
   "definitions": {
     "useTabs": {
       "description": "Whether to use tabs (true) or spaces (false).",
@@ -9,10 +79,10 @@
       "default": false,
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Uses tabs for indentation."
       }, {
         "const": false,
-        "description": ""
+        "description": "Uses spaces for indentation."
       }]
     },
     "newLineKind": {
@@ -105,10 +175,10 @@
       "default": false,
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Sorts the entries of each table."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains the order of the entries."
       }]
     },
     "sortArrays": {
@@ -117,10 +187,10 @@
       "default": false,
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Sorts the values of each array."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains the order of the values."
       }]
     },
     "sortInlineTables": {
@@ -129,10 +199,10 @@
       "default": false,
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Sorts the entries of each inline table."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains the order of the entries."
       }]
     },
     "preferSingleLine": {
@@ -141,10 +211,10 @@
       "default": false,
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Puts arrays and inline tables that span multiple lines on a single line when they fit within the line width."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains arrays and inline tables being on multiple lines."
       }]
     },
     "array.preferSingleLine": {
@@ -152,10 +222,10 @@
       "type": "boolean",
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Puts an array that spans multiple lines on a single line when it fits within the line width."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains an array being on multiple lines."
       }]
     },
     "inlineTable.preferSingleLine": {
@@ -163,10 +233,10 @@
       "type": "boolean",
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Puts an inline table that spans multiple lines on a single line."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains an inline table being on multiple lines."
       }]
     },
     "array.spaceSurroundingBrackets": {
@@ -206,15 +276,15 @@
       }]
     },
     "cargo.applyConventions": {
-      "description": "Whether to apply sorting to a Cargo.toml file.",
+      "description": "Whether to apply sorting to a `Cargo.toml` file.",
       "type": "boolean",
       "default": true,
       "oneOf": [{
         "const": true,
-        "description": ""
+        "description": "Sorts the package section, the dependency sections, and the workspace members in the conventional order."
       }, {
         "const": false,
-        "description": ""
+        "description": "Maintains the order of the entries."
       }]
     }
   },
@@ -222,12 +292,15 @@
     "lineWidth": {
       "description": "The width of a line the printer will try to stay under. Note that the printer may exceed this width in certain cases.",
       "default": 120,
-      "type": "number"
+      "type": "integer",
+      "minimum": 1
     },
     "indentWidth": {
       "description": "The number of characters for an indent.",
       "default": 2,
-      "type": "number"
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255
     },
     "useTabs": {
       "$ref": "#/definitions/useTabs"
@@ -236,68 +309,175 @@
       "$ref": "#/definitions/newLineKind"
     },
     "quoteStyle": {
-      "$ref": "#/definitions/quoteStyle"
+      "$ref": "#/definitions/quoteStyle",
+      "x-example": {
+        "input": [
+          "title = 'My App'",
+          "version = \"1.0.0\"",
+          "path = 'C:\\Users\\app'"
+        ]
+      }
     },
     "indentTables": {
-      "$ref": "#/definitions/indentTables"
+      "$ref": "#/definitions/indentTables",
+      "x-example": {
+        "input": [
+          "[server]",
+          "host = \"localhost\"",
+          "",
+          "  [server.tls]",
+          "  cert = \"cert.pem\"",
+          "",
+          "[server.limits]",
+          "connections = 100"
+        ]
+      }
     },
     "indentEntries": {
-      "$ref": "#/definitions/indentEntries"
+      "$ref": "#/definitions/indentEntries",
+      "x-example": {
+        "input": [
+          "[server]",
+          "  host = \"localhost\"",
+          "  port = 8080",
+          "",
+          "[database]",
+          "url = \"postgres://localhost/app\""
+        ]
+      }
     },
     "trailingCommas": {
-      "$ref": "#/definitions/trailingCommas"
+      "$ref": "#/definitions/trailingCommas",
+      "x-example": {
+        "input": [
+          "features = [",
+          "  \"json\",",
+          "  \"yaml\"",
+          "]",
+          "ports = [80, 443,]"
+        ]
+      }
     },
     "spaceSurroundingEquals": {
-      "$ref": "#/definitions/spaceSurroundingEquals"
+      "$ref": "#/definitions/spaceSurroundingEquals",
+      "x-example": {
+        "input": [
+          "name=\"app\"",
+          "version = \"1.0.0\"",
+          "point = { x = 1, y = 2 }"
+        ]
+      }
     },
     "sortKeys": {
-      "$ref": "#/definitions/sortKeys"
+      "$ref": "#/definitions/sortKeys",
+      "x-example": {
+        "input": [
+          "[server]",
+          "port = 8080",
+          "host = \"localhost\"",
+          "debug = false",
+          "",
+          "# limits",
+          "timeout = 30",
+          "retries = 3"
+        ]
+      }
     },
     "sortArrays": {
-      "$ref": "#/definitions/sortArrays"
+      "$ref": "#/definitions/sortArrays",
+      "x-example": {
+        "input": [
+          "languages = [\"rust\", \"go\", \"c\"]",
+          "targets = [",
+          "  \"linux\",",
+          "  \"windows\",",
+          "  \"darwin\",",
+          "]"
+        ]
+      }
     },
     "sortInlineTables": {
-      "$ref": "#/definitions/sortInlineTables"
+      "$ref": "#/definitions/sortInlineTables",
+      "x-example": {
+        "input": [
+          "point = { y = 2, x = 1 }",
+          "size = { width = 10, height = 20 }"
+        ]
+      }
     },
     "preferSingleLine": {
-      "$ref": "#/definitions/preferSingleLine"
+      "$ref": "#/definitions/preferSingleLine",
+      "x-example": {
+        "input": [
+          "ports = [",
+          "  80,",
+          "  443,",
+          "]",
+          "point = {",
+          "  x = 1,",
+          "  y = 2,",
+          "}"
+        ]
+      }
     },
     "array.preferSingleLine": {
-      "$ref": "#/definitions/array.preferSingleLine"
-    },
-    "array.preferSingleLine": {
-      "description": "Whether to collapse an array written over several lines onto a single line when it fits. A comment written within it keeps it expanded. Defaults to whatever `preferSingleLine` is set to.",
-      "type": "boolean",
-      "oneOf": [{
-        "const": true,
-        "description": ""
-      }, {
-        "const": false,
-        "description": ""
-      }]
+      "$ref": "#/definitions/array.preferSingleLine",
+      "x-overrides": "preferSingleLine",
+      "x-example": {
+        "input": [
+          "ports = [",
+          "  80,",
+          "  443,",
+          "]",
+          "point = {",
+          "  x = 1,",
+          "  y = 2,",
+          "}"
+        ]
+      }
     },
     "inlineTable.preferSingleLine": {
-      "description": "Whether to collapse an inline table written over several lines onto a single line. A comment written anywhere within it keeps it expanded. Defaults to whatever `preferSingleLine` is set to.",
-      "type": "boolean",
-      "oneOf": [{
-        "const": true,
-        "description": ""
-      }, {
-        "const": false,
-        "description": ""
-      }]
+      "$ref": "#/definitions/inlineTable.preferSingleLine",
+      "x-overrides": "preferSingleLine",
+      "x-example": {
+        "input": [
+          "ports = [",
+          "  80,",
+          "  443,",
+          "]",
+          "point = {",
+          "  x = 1,",
+          "  y = 2,",
+          "}"
+        ]
+      }
     },
     "array.spaceSurroundingBrackets": {
-      "$ref": "#/definitions/array.spaceSurroundingBrackets"
-    },
-    "inlineTable.preferSingleLine": {
-      "$ref": "#/definitions/inlineTable.preferSingleLine"
+      "$ref": "#/definitions/array.spaceSurroundingBrackets",
+      "x-example": {
+        "input": [
+          "ports = [80, 443]",
+          "hosts = [ \"localhost\" ]"
+        ]
+      }
     },
     "inlineTable.spaceSurroundingBraces": {
-      "$ref": "#/definitions/inlineTable.spaceSurroundingBraces"
+      "$ref": "#/definitions/inlineTable.spaceSurroundingBraces",
+      "x-example": {
+        "input": [
+          "point = {x = 1, y = 2}",
+          "size = { width = 10, height = 20 }"
+        ]
+      }
     },
     "comment.forceLeadingSpace": {
-      "$ref": "#/definitions/comment.forceLeadingSpace"
+      "$ref": "#/definitions/comment.forceLeadingSpace",
+      "x-example": {
+        "input": [
+          "#the port to listen on",
+          "port = 8080 #default"
+        ]
+      }
     },
     "cargo.applyConventions": {
       "$ref": "#/definitions/cargo.applyConventions"
